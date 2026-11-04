@@ -1,0 +1,172 @@
+
+# ==================================================
+# UNITY PROJECT
+# ==================================================
+# Unity project: Ultimate Pogo Barn/
+
+# Generated directories
+Ultimate Pogo Barn/.utmp/
+Ultimate Pogo Barn/[Ll]ibrary/
+Ultimate Pogo Barn/[Tt]emp/
+Ultimate Pogo Barn/[Oo]bj/
+Ultimate Pogo Barn/[Bb]uild/
+Ultimate Pogo Barn/[Bb]uilds/
+Ultimate Pogo Barn/[Ll]ogs/
+Ultimate Pogo Barn/[Uu]ser[Ss]ettings/
+
+# Logs
+Ultimate Pogo Barn/*.log
+
+# Memory Profiler
+Ultimate Pogo Barn/[Mm]emory[Cc]aptures/
+
+# Recordings
+Ultimate Pogo Barn/[Rr]ecordings/
+
+# Optional Asset Store Tools
+# Ultimate Pogo Barn/[Aa]ssets/AssetStoreTools*
+
+# JetBrains Rider
+Ultimate Pogo Barn/[Aa]ssets/Plugins/Editor/JetBrains*
+*.DotSettings.user
+
+# Generated IDE files
+Ultimate Pogo Barn/ExportedObj/
+Ultimate Pogo Barn/.consulo/
+Ultimate Pogo Barn/*.csproj
+Ultimate Pogo Barn/*.unityproj
+Ultimate Pogo Barn/*.sln
+Ultimate Pogo Barn/*.slnx
+Ultimate Pogo Barn/*.suo
+Ultimate Pogo Barn/*.tmp
+Ultimate Pogo Barn/*.user
+Ultimate Pogo Barn/*.userprefs
+Ultimate Pogo Barn/*.pidb
+Ultimate Pogo Barn/*.booproj
+Ultimate Pogo Barn/*.svd
+Ultimate Pogo Barn/*.pdb
+Ultimate Pogo Barn/*.mdb
+Ultimate Pogo Barn/*.opendb
+Ultimate Pogo Barn/*.VC.db
+
+# Generated meta files
+Ultimate Pogo Barn/*.pidb.meta
+Ultimate Pogo Barn/*.pdb.meta
+Ultimate Pogo Barn/*.mdb.meta
+
+# Crash reports
+Ultimate Pogo Barn/sysinfo.txt
+Ultimate Pogo Barn/mono_crash.*
+Ultimate Pogo Barn/crashlytics-build.properties
+
+# Mono generated files
+Ultimate Pogo Barn/.dirstamp
+Ultimate Pogo Barn/tmpinst-dir.stamp
+
+# Builds
+Ultimate Pogo Barn/*_BackUpThisFolder_ButDontShipItWithYourGame/
+Ultimate Pogo Barn/*_BurstDebugInformation_DoNotShip/
+Ultimate Pogo Barn/*.apk
+Ultimate Pogo Barn/*.aab
+Ultimate Pogo Barn/*.obb
+Ultimate Pogo Barn/*.unitypackage
+Ultimate Pogo Barn/*.unitypackage.meta
+Ultimate Pogo Barn/*.app
+
+# Blender backups
+Ultimate Pogo Barn/[Aa]ssets/**/*.blend1
+Ultimate Pogo Barn/[Aa]ssets/**/*.blend1.meta
+
+# TouchDesigner cache
+Ultimate Pogo Barn/[Aa]ssets/**/TDImportCache/
+Ultimate Pogo Barn/[Aa]ssets/**/TDImportCache.meta
+
+# Unity Crash Recovery
+Ultimate Pogo Barn/[Aa]ssets/_Recovery/
+Ultimate Pogo Barn/[Aa]ssets/_Recovery.meta
+
+# Addressables
+Ultimate Pogo Barn/[Aa]ssets/AddressableAssetsData/*/addressableassets_content_state.bin
+Ultimate Pogo Barn/[Aa]ssets/AddressableAssetsData/*/addressableassets_content_state.bin.meta
+Ultimate Pogo Barn/[Aa]ssets/AddressableAssetsData/link.xml
+Ultimate Pogo Barn/[Aa]ssets/AddressableAssetsData/link.xml.meta
+Ultimate Pogo Barn/[Aa]ssets/Addressables_Temp/
+Ultimate Pogo Barn/[Aa]ssets/Addressables_Temp.meta
+Ultimate Pogo Barn/[Aa]ssets/StreamingAssets/aa/
+Ultimate Pogo Barn/[Aa]ssets/StreamingAssets/aa.meta
+Ultimate Pogo Barn/ServerData/
+
+# EDM4U
+Ultimate Pogo Barn/[Aa]ssets/GeneratedLocalRepo/
+Ultimate Pogo Barn/[Aa]ssets/GeneratedLocalRepo.meta
+
+# Android Gradle
+Ultimate Pogo Barn/[Aa]ssets/Plugins/Android/**/*.gradle.backup*
+Ultimate Pogo Barn/[Aa]ssets/Plugins/Android/**/local.properties
+
+# Unity Test Framework
+Ultimate Pogo Barn/[Aa]ssets/Resources/PerformanceTestRunInfo.json
+Ultimate Pogo Barn/[Aa]ssets/Resources/PerformanceTestRunInfo.json.meta
+Ultimate Pogo Barn/[Aa]ssets/Resources/PerformanceTestRunSettings.json
+Ultimate Pogo Barn/[Aa]ssets/Resources/PerformanceTestRunSettings.json.meta
+Ultimate Pogo Barn/[Aa]ssets/InitTestScene*.unity
+Ultimate Pogo Barn/[Aa]ssets/InitTestScene*.unity.meta
+
+# Visual Scripting
+Ultimate Pogo Barn/[Aa]ssets/Unity.VisualScripting.Generated/Unity.VisualScripting.Core/Property Providers/
+Ultimate Pogo Barn/[Aa]ssets/Unity.VisualScripting.Generated/Unity.VisualScripting.Core/Property Providers.meta
+Ultimate Pogo Barn/[Aa]ssets/Unity.VisualScripting.Generated/Unity.VisualScripting.Flow/UnitOptions.db
+Ultimate Pogo Barn/[Aa]ssets/Unity.VisualScripting.Generated/Unity.VisualScripting.Flow/UnitOptions.db.meta
+
+# UI Toolkit
+Ultimate Pogo Barn/UIElementsSchema/
+
+# Scene dependency cache
+Ultimate Pogo Barn/[Aa]ssets/[Ss]ceneDependencyCache*
+
+
+# ==================================================
+# VS CODE
+# ==================================================
+
+Ultimate Pogo Barn/.vscode/
+Ultimate Pogo Barn/.history/
+
+
+# ==================================================
+# VISUAL STUDIO
+# ==================================================
+
+Ultimate Pogo Barn/.vs/
+
+
+# ==================================================
+# JETBRAINS
+# ==================================================
+
+Ultimate Pogo Barn/.idea/
+
+
+# ==================================================
+# GRADLE
+# ==================================================
+
+Ultimate Pogo Barn/.gradle/
+
+
+# ==================================================
+# OPERATING SYSTEM
+# ==================================================
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
