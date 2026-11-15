@@ -9483,13 +9483,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 948753623}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalRotation: {x: 0.3346744, y: -0, z: -0, w: 0.9423338}
+  m_LocalPosition: {x: 0, y: 22.77, z: -42.9}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 39.105, y: 0, z: 0}
 --- !u!1 &950750476
 GameObject:
   m_ObjectHideFlags: 0
@@ -16739,7 +16739,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e0253ea693043034f8f5ce174e5fe4c6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RaceCheckpoint
-  checkpointIndex: 2
 --- !u!65 &1649218420
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -16897,8 +16896,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1662970487}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.0000018358783, y: 0, z: -28}
+  m_LocalRotation: {x: 0, y: -0.7071068, z: 0, w: 0.7071068}
+  m_LocalPosition: {x: -0.0000018368241, y: 0, z: -28}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -16907,7 +16906,7 @@ Transform:
   - {fileID: 1845343061}
   - {fileID: 1956481209}
   m_Father: {fileID: 1677296212}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: -90, z: 0}
 --- !u!1 &1670695255
 GameObject:
   m_ObjectHideFlags: 0
@@ -17247,7 +17246,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e0253ea693043034f8f5ce174e5fe4c6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RaceCheckpoint
-  checkpointIndex: 3
 --- !u!65 &1686997960
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -20016,7 +20014,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1931637598}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: 0, y: 0.7071068, z: 0, w: 0.7071068}
   m_LocalPosition: {x: -0.0000018358783, y: 0, z: 28}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -20026,7 +20024,7 @@ Transform:
   - {fileID: 710212258}
   - {fileID: 1649218418}
   m_Father: {fileID: 1677296212}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 90, z: 0}
 --- !u!1 &1934029716
 GameObject:
   m_ObjectHideFlags: 0
@@ -21972,7 +21970,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e0253ea693043034f8f5ce174e5fe4c6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RaceCheckpoint
-  checkpointIndex: 1
 --- !u!65 &2125340268
 BoxCollider:
   m_ObjectHideFlags: 0
