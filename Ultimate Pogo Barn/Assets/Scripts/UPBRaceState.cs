@@ -1,2 +1,8 @@
-// Enum: explicit race states used by race-flow logic.
-public enum UPBRaceState { Waiting, Countdown, Racing, Finished }
+// Enum concept: the race can only be in one of these clearly defined states.
+public enum UPBRaceState
+{
+    Waiting,
+    Countdown,
+    Racing,
+    Finished
+}

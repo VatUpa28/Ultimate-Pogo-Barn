@@ -1,10 +1,22 @@
 using UnityEngine;
+
+[RequireComponent(typeof(Collider))]
 public class UPBCheckpointGate : MonoBehaviour
 {
-    public int CheckpointIndex;
+    [UnityEngine.Serialization.FormerlySerializedAs("CheckpointIndex")]
+    [Min(1)] public int checkpointNumber = 1;
+
+    private void Reset()
+    {
+        GetComponent<Collider>().isTrigger = true;
+    }
+
     private void OnTriggerEnter(Collider other)
     {
-        if (other.GetComponentInParent<UPBRacerTag>() != null)
-            Debug.Log("Checkpoint reached: " + CheckpointIndex, other);
+        PlayerRaceProgress progress = other.GetComponentInParent<PlayerRaceProgress>();
+        if (progress != null)
+            progress.RegisterCheckpoint(checkpointNumber);
+        else if (other.GetComponentInParent<UPBRacerTag>() != null)
+            Debug.Log("Checkpoint reached: " + checkpointNumber, other);
     }
 }
