@@ -16,7 +16,5 @@ public class UPBCheckpointGate : MonoBehaviour
         PlayerRaceProgress progress = other.GetComponentInParent<PlayerRaceProgress>();
         if (progress != null)
             progress.RegisterCheckpoint(checkpointNumber);
-        else if (other.GetComponentInParent<UPBRacerTag>() != null)
-            Debug.Log("Checkpoint reached: " + checkpointNumber, other);
     }
 }

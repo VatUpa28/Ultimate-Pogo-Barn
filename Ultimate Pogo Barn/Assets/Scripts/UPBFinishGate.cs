@@ -13,7 +13,5 @@ public class UPBFinishGate : MonoBehaviour
         PlayerRaceProgress progress = other.GetComponentInParent<PlayerRaceProgress>();
         if (progress != null)
             progress.Finish();
-        else if (other.GetComponentInParent<UPBRacerTag>() != null)
-            Debug.Log("Finish gate crossed.", other);
     }
 }
