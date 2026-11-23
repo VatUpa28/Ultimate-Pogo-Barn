@@ -19,7 +19,7 @@ public class PlayerRaceProgress : MonoBehaviour
         if (finished || nextCheckpoint <= totalCheckpoints) return;
         finished = true;
         finishTime = Time.time - startTime;
-        Map1RaceManager manager = FindObjectOfType<Map1RaceManager>();
+        Map1RaceManager manager = FindFirstObjectByType<Map1RaceManager>();
         if (manager != null) manager.ReportFinish(this, finishTime);
     }
 }
