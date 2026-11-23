@@ -8,14 +8,22 @@ public class BarnBackdrop : MonoBehaviour
     private const float IslandRepeat = 96f;
     private readonly List<(Transform group, float startZ)> islands = new List<(Transform, float)>();
     private Camera followCamera;
-    private Transform detailWater;
-    private Transform horizonWater;
+    [SerializeField] private Transform detailWater;
+    [SerializeField] private Transform horizonWater;
+    [SerializeField] private Transform woodedIslands;
     private Mesh waterMesh;
     private Mesh horizonMesh;
 
     public void Build(Material atlasMaterial, Camera camera)
     {
         followCamera = camera;
+        if (detailWater != null && horizonWater != null && woodedIslands != null)
+        {
+            foreach (Transform island in woodedIslands)
+                islands.Add((island, island.position.z));
+            return;
+        }
+
         var scenery = new GameObject("Water and Wooded Islands");
         scenery.transform.SetParent(transform, false);
         BuildWater(scenery.transform);
@@ -56,9 +64,9 @@ public class BarnBackdrop : MonoBehaviour
 
         Vector3 center = followCamera.transform.position;
         const float detailStep = 24f;
-        detailWater.position = new Vector3(Mathf.Round(center.x / detailStep) * detailStep, 0f,
+        detailWater.position = new Vector3(Mathf.Round(center.x / detailStep) * detailStep, detailWater.position.y,
                                            Mathf.Round(center.z / detailStep) * detailStep);
-        horizonWater.position = new Vector3(center.x, WaterHeight - 0.25f, center.z);
+        horizonWater.position = new Vector3(center.x, horizonWater.position.y, center.z);
 
         foreach (var island in islands)
         {
@@ -119,6 +127,7 @@ public class BarnBackdrop : MonoBehaviour
         var horizon = new GameObject("Ocean Horizon");
         horizonWater = horizon.transform;
         horizonWater.SetParent(parent, false);
+        horizonWater.localPosition = Vector3.up * (WaterHeight - 0.25f);
         float extent = followCamera.farClipPlane * 2f;
         horizonMesh = new Mesh { name = "Barn Ocean Horizon" };
         horizonMesh.vertices = new[]

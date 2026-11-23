@@ -20,12 +20,33 @@ public class BarnBuildRounds : MonoBehaviour
 
     private enum Piece { Grass, Ramp, Barrel, Crate, Posts, Spikes, Wall }
 
+    [System.Serializable]
+    private class PrefabOption
+    {
+        public GameObject prefab;
+        public string displayName;
+        public Texture2D thumbnail;
+    }
+
+    [Tooltip("Drag project prefabs here to add them to the obstacle menu.")]
+    [SerializeField] private List<PrefabOption> customPrefabs = new List<PrefabOption>();
+
+    private readonly HashSet<Collider> trackColliders = new HashSet<Collider>();
+    private PrefabOption selectedPrefab;
+
     private readonly Dictionary<Vector2Int, float> tileHeights = new Dictionary<Vector2Int, float>();
     private readonly HashSet<Vector2Int> obstacles = new HashSet<Vector2Int>();
     private readonly GameObject[] models = new GameObject[ModelNames.Length];
     private readonly Texture2D[] icons = new Texture2D[ModelNames.Length];
 
+    [Header("Scene Layout")]
+    [SerializeField] private Transform startingPlatform;
+    [SerializeField] private Camera sceneCamera;
+    [SerializeField] private BarnBackdrop sceneBackdrop;
+
     private Camera mapCamera;
+    private Vector3 cameraOffset = CameraOffset;
+    private int courseColumn;
     private Transform pieces;
     private GameObject preview;
     private Material modelMaterial;
@@ -42,7 +63,7 @@ public class BarnBuildRounds : MonoBehaviour
     private Quaternion hoverRotation = Quaternion.identity;
     private bool validPlacement;
 
-    private bool IsSection => selectedPiece <= Piece.Ramp;
+    private bool IsSection => selectedPrefab == null && selectedPiece <= Piece.Ramp;
 
     private float MenuWidth => Mathf.Min(PanelWidth, Screen.width * 0.4f);
 
@@ -69,6 +90,28 @@ public class BarnBuildRounds : MonoBehaviour
         pieces = new GameObject("Map Pieces").transform;
         pieces.SetParent(transform);
 
+        if (sceneCamera != null)
+        {
+            mapCamera = sceneCamera;
+            cameraOffset = mapCamera.transform.position;
+        }
+        else
+        {
+            CreateCameraAndLight();
+        }
+
+        if (startingPlatform != null && startingPlatform.childCount > 0)
+            RegisterStartingPlatform();
+        else
+            AppendSection(Piece.Grass);
+
+        BarnBackdrop backdrop = sceneBackdrop != null ? sceneBackdrop : gameObject.AddComponent<BarnBackdrop>();
+        backdrop.Build(modelMaterial, mapCamera);
+        Choose(Piece.Grass);
+    }
+
+    private void CreateCameraAndLight()
+    {
         var cameraObject = new GameObject("Map Camera");
         cameraObject.transform.SetParent(transform);
         mapCamera = cameraObject.AddComponent<Camera>();
@@ -82,11 +125,37 @@ public class BarnBuildRounds : MonoBehaviour
         lightObject.transform.SetParent(transform);
         lightObject.transform.rotation = Quaternion.Euler(48f, -26f, 0f);
         lightObject.AddComponent<Light>().type = LightType.Directional;
+    }
 
-        AppendSection(Piece.Grass);
+    private void RegisterStartingPlatform()
+    {
+        courseColumn = Mathf.RoundToInt(startingPlatform.position.x / CellSize);
+        nextRow = int.MinValue;
+        foreach (Transform tile in startingPlatform)
+        {
+            if (!tile.gameObject.activeInHierarchy)
+                continue;
 
-        gameObject.AddComponent<BarnBackdrop>().Build(modelMaterial, mapCamera);
-        Choose(Piece.Grass);
+            Vector3 position = tile.position;
+            var cell = new Vector2Int(Mathf.RoundToInt(position.x / CellSize),
+                                      Mathf.RoundToInt(position.z / CellSize));
+            tile.position = CellPosition(cell, position.y);
+            tileHeights[cell] = position.y;
+            foreach (Collider collider in tile.GetComponentsInChildren<Collider>())
+                trackColliders.Add(collider);
+
+            if (cell.y >= nextRow)
+            {
+                nextRow = cell.y + 1;
+                nextHeight = position.y;
+            }
+        }
+
+        if (nextRow == int.MinValue)
+        {
+            nextRow = -1;
+            AppendSection(Piece.Grass);
+        }
     }
 
     private void Update()
@@ -118,7 +187,7 @@ public class BarnBuildRounds : MonoBehaviour
     {
         if (IsSection)
         {
-            hoverPosition = CellPosition(new Vector2Int(0, nextRow), nextHeight);
+            hoverPosition = CellPosition(new Vector2Int(courseColumn, nextRow), nextHeight);
             hoverRotation = Quaternion.identity;
             Vector3 center = hoverPosition + new Vector3(0f, 0.35f, CellSize);
             Vector3 size = new Vector3(CellSize * 3f, 0.8f, CellSize * SectionRows);
@@ -126,7 +195,7 @@ public class BarnBuildRounds : MonoBehaviour
             return;
         }
 
-        bool hitTrack = Physics.Raycast(ray, out RaycastHit hit, 300f);
+        bool hitTrack = RaycastTrack(ray, 300f, out RaycastHit hit);
         var gridPlane = new Plane(Vector3.up, Vector3.up * viewCenter.y);
         if (!hitTrack && !gridPlane.Raycast(ray, out _))
             return;
@@ -142,12 +211,33 @@ public class BarnBuildRounds : MonoBehaviour
             return;
 
         Vector3 aboveCenter = CellPosition(selectedCell, height + 2f);
-        if (Physics.Raycast(aboveCenter, Vector3.down, out RaycastHit surface, 3f))
+        if (RaycastTrack(new Ray(aboveCenter, Vector3.down), 3f, out RaycastHit surface))
         {
             hoverPosition = surface.point;
             hoverRotation = Quaternion.FromToRotation(Vector3.up, surface.normal);
             validPlacement = hit.normal.y > 0.5f && !obstacles.Contains(selectedCell);
         }
+    }
+
+    private bool RaycastTrack(Ray ray, float distance, out RaycastHit hit)
+    {
+        if (!Physics.Raycast(ray, out hit, distance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+            return false;
+        if (trackColliders.Contains(hit.collider))
+            return true;
+
+        float nearest = float.PositiveInfinity;
+        foreach (RaycastHit candidate in Physics.RaycastAll(ray, distance, Physics.DefaultRaycastLayers,
+                                                            QueryTriggerInteraction.Ignore))
+        {
+            if (candidate.distance < nearest && trackColliders.Contains(candidate.collider))
+            {
+                hit = candidate;
+                nearest = candidate.distance;
+            }
+        }
+
+        return nearest < float.PositiveInfinity;
     }
 
     private void MoveCamera()
@@ -164,7 +254,7 @@ public class BarnBuildRounds : MonoBehaviour
         }
 
         float blend = 1f - Mathf.Exp(-10f * Time.unscaledDeltaTime);
-        mapCamera.transform.position = Vector3.Lerp(mapCamera.transform.position, viewCenter + CameraOffset, blend);
+        mapCamera.transform.position = Vector3.Lerp(mapCamera.transform.position, viewCenter + cameraOffset, blend);
     }
 
     private void OnGUI()
@@ -189,6 +279,11 @@ public class BarnBuildRounds : MonoBehaviour
         DrawChoice(round % 2 == 1 ? Piece.Crate : Piece.Posts);
         GUILayout.EndHorizontal();
         DrawChoice(Piece.Wall);
+        foreach (PrefabOption option in customPrefabs)
+        {
+            if (option != null && option.prefab != null)
+                DrawPrefabChoice(option);
+        }
         GUI.enabled = true;
 
         GUILayout.Space(6f);
@@ -224,11 +319,35 @@ public class BarnBuildRounds : MonoBehaviour
         if (GUILayout.Button(icons[(int)piece], GUILayout.Height(54f), GUILayout.Width(width)))
             Choose(piece);
         string label = piece == Piece.Grass ? "Platform" : piece.ToString();
-        GUILayout.Label(piece == selectedPiece ? "> " + label : label);
+        GUILayout.Label(selectedPrefab == null && piece == selectedPiece ? "> " + label : label);
         GUILayout.EndVertical();
     }
 
+    private void DrawPrefabChoice(PrefabOption option)
+    {
+        string label = string.IsNullOrWhiteSpace(option.displayName) ? option.prefab.name : option.displayName;
+        if (selectedPrefab == option)
+            label = "> " + label;
+
+        var content = new GUIContent(label, option.thumbnail);
+        if (!GUILayout.Button(content, GUILayout.Height(option.thumbnail == null ? 28f : 52f)))
+            return;
+
+        selectedPrefab = option;
+        var ghost = new GameObject("Prefab Preview");
+        CopyPreviewGeometry(option.prefab.transform, ghost.transform);
+        SitOnSurface(ghost);
+        SetPreview(ghost);
+    }
+
     private void Choose(Piece piece)
+    {
+        selectedPrefab = null;
+        selectedPiece = piece;
+        SetPreview(IsSection ? CreateSection(piece, previewMaterial, false) : CreateObstacle(piece, previewMaterial));
+    }
+
+    private void SetPreview(GameObject newPreview)
     {
         if (preview != null)
         {
@@ -236,8 +355,7 @@ public class BarnBuildRounds : MonoBehaviour
             Destroy(preview);
         }
 
-        selectedPiece = piece;
-        preview = IsSection ? CreateSection(piece, previewMaterial, false) : CreateObstacle(piece, previewMaterial);
+        preview = newPreview;
         preview.name = "Placement Preview";
         preview.transform.SetParent(transform);
         preview.SetActive(false);
@@ -249,6 +367,11 @@ public class BarnBuildRounds : MonoBehaviour
         {
             AppendSection(selectedPiece);
             FocusFront();
+        }
+        else if (selectedPrefab != null)
+        {
+            PlacePrefab(selectedPrefab.prefab);
+            obstacles.Add(selectedCell);
         }
         else
         {
@@ -268,14 +391,14 @@ public class BarnBuildRounds : MonoBehaviour
 
     private void FocusFront()
     {
-        viewCenter = new Vector3(0f, nextHeight, (nextRow - 1) * CellSize);
+        viewCenter = new Vector3(courseColumn * CellSize, nextHeight, (nextRow - 1) * CellSize);
     }
 
     private void AppendSection(Piece piece)
     {
         GameObject section = CreateSection(piece, modelMaterial, true);
         section.transform.SetParent(pieces);
-        section.transform.position = CellPosition(new Vector2Int(0, nextRow), nextHeight);
+        section.transform.position = CellPosition(new Vector2Int(courseColumn, nextRow), nextHeight);
         nextRow += SectionRows;
         if (piece == Piece.Ramp)
             nextHeight += RampRise;
@@ -295,7 +418,11 @@ public class BarnBuildRounds : MonoBehaviour
                 tile.transform.SetParent(section.transform, false);
                 tile.transform.localPosition = new Vector3(column * CellSize, height, row * CellSize);
                 if (solid)
-                    tileHeights.Add(new Vector2Int(column, nextRow + row), nextHeight + height);
+                {
+                    tileHeights.Add(new Vector2Int(courseColumn + column, nextRow + row), nextHeight + height);
+                    foreach (Collider collider in tile.GetComponentsInChildren<Collider>())
+                        trackColliders.Add(collider);
+                }
             }
         }
 
@@ -350,6 +477,71 @@ public class BarnBuildRounds : MonoBehaviour
         bounds = GetBounds(model);
         model.transform.localPosition -= new Vector3(bounds.center.x, bounds.min.y, bounds.center.z);
         return root;
+    }
+
+    private void PlacePrefab(GameObject prefab)
+    {
+        var anchor = new GameObject(prefab.name);
+        anchor.SetActive(false);
+        Instantiate(prefab, anchor.transform);
+        Bounds bounds = SitOnSurface(anchor);
+        if (anchor.GetComponentInChildren<Collider>(true) == null && bounds.size.sqrMagnitude > 0f)
+        {
+            BoxCollider collider = anchor.AddComponent<BoxCollider>();
+            collider.center = bounds.center;
+            collider.size = bounds.size;
+        }
+
+        anchor.transform.SetParent(pieces, false);
+        anchor.transform.SetPositionAndRotation(hoverPosition, hoverRotation);
+        anchor.SetActive(true);
+    }
+
+    private void CopyPreviewGeometry(Transform source, Transform parent)
+    {
+        if (!source.gameObject.activeSelf)
+            return;
+
+        var copy = new GameObject(source.name);
+        copy.transform.SetParent(parent, false);
+        copy.transform.SetLocalPositionAndRotation(source.localPosition, source.localRotation);
+        copy.transform.localScale = source.localScale;
+
+        Mesh mesh = null;
+        if (source.TryGetComponent(out MeshRenderer renderer) && renderer.enabled &&
+            source.TryGetComponent(out MeshFilter filter))
+            mesh = filter.sharedMesh;
+        else if (source.TryGetComponent(out SkinnedMeshRenderer skinned) && skinned.enabled)
+            mesh = skinned.sharedMesh;
+
+        if (mesh != null)
+        {
+            copy.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var materials = new Material[mesh.subMeshCount];
+            for (int i = 0; i < materials.Length; i++)
+                materials[i] = previewMaterial;
+            copy.AddComponent<MeshRenderer>().sharedMaterials = materials;
+        }
+
+        foreach (Transform child in source)
+            CopyPreviewGeometry(child, copy.transform);
+    }
+
+    private static Bounds SitOnSurface(GameObject anchor)
+    {
+        Renderer[] renderers = anchor.GetComponentsInChildren<Renderer>(true);
+        if (renderers.Length == 0)
+            return new Bounds();
+
+        Bounds bounds = renderers[0].bounds;
+        foreach (Renderer renderer in renderers)
+            bounds.Encapsulate(renderer.bounds);
+
+        Vector3 offset = new Vector3(-bounds.center.x, -bounds.min.y, -bounds.center.z);
+        foreach (Transform child in anchor.transform)
+            child.localPosition += offset;
+        bounds.center += offset;
+        return bounds;
     }
 
     private static void ApplyMaterial(GameObject model, Material material)
