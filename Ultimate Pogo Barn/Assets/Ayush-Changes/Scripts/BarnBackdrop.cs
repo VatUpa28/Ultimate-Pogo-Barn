@@ -3,9 +3,17 @@ using UnityEngine;
 
 public class BarnBackdrop : MonoBehaviour
 {
-    private readonly List<Material> waterMaterials = new List<Material>();
+    private Material nearMaterial;
+    private Material farMaterial;
+    private Renderer waterRenderer;
+    private MaterialPropertyBlock rippleProperties;
+    private Vector3 splashPosition;
+    private float splashTime = float.NegativeInfinity;
+    private bool rippleVisible;
+
+    public float SurfaceHeight => detailWater != null ? detailWater.position.y + WaterHeight : WaterHeight;
     private const float WaterHeight = -3.6f;
-    private const float IslandRepeat = 96f;
+    private const float IslandRepeat = 150f;
     private readonly List<(Transform group, float startZ)> islands = new List<(Transform, float)>();
     private Camera followCamera;
     [SerializeField] private Transform detailWater;
@@ -17,10 +25,31 @@ public class BarnBackdrop : MonoBehaviour
     public void Build(Material atlasMaterial, Camera camera)
     {
         followCamera = camera;
+        var cameraData = camera.GetComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
+        if (cameraData != null)
+        {
+            cameraData.requiresDepthTexture = true;
+            var profile = Resources.Load<UnityEngine.Rendering.VolumeProfile>("BarnPieces/Scenery/Barn Finish Lighting");
+            if (profile != null)
+            {
+                var volumeObject = new GameObject("Barn Color and Bloom");
+                volumeObject.transform.SetParent(transform, false);
+                var volume = volumeObject.AddComponent<UnityEngine.Rendering.Volume>();
+                volume.isGlobal = true;
+                volume.sharedProfile = profile;
+                cameraData.renderPostProcessing = true;
+            }
+        }
         if (detailWater != null && horizonWater != null && woodedIslands != null)
         {
+            waterRenderer = detailWater.GetComponent<Renderer>();
+            int islandIndex = 0;
             foreach (Transform island in woodedIslands)
+            {
                 islands.Add((island, island.position.z));
+                DecorateIsland(island, atlasMaterial, islandIndex++);
+            }
+            BuildArchipelago(woodedIslands, atlasMaterial);
             return;
         }
 
@@ -28,32 +57,96 @@ public class BarnBackdrop : MonoBehaviour
         scenery.transform.SetParent(transform, false);
         BuildWater(scenery.transform);
 
-        GameObject islandTile = Resources.Load<GameObject>("BarnPieces/Scenery/block-grass-large");
+        BuildArchipelago(scenery.transform, atlasMaterial);
+    }
+
+    private void BuildArchipelago(Transform parent, Material material)
+    {
+        GameObject terrain = Resources.Load<GameObject>("BarnPieces/Scenery/block-grass-large");
         GameObject pine = Resources.Load<GameObject>("BarnPieces/Scenery/tree-pine");
         GameObject oak = Resources.Load<GameObject>("BarnPieces/Scenery/tree");
-        var random = new System.Random(803);
-        foreach (Vector3 position in new[]
+        if (!terrain || !pine || !oak)
+            return;
+
+        var random = new System.Random(822);
+        var locations = new[]
         {
-            new Vector3(-18f, -3.9f, 15f), new Vector3(19f, -3.9f, 22f),
-            new Vector3(-32f, -3.9f, 43f), new Vector3(32f, -3.9f, 49f)
-        })
+            new Vector3(-13f, 3.2f, 28f), new Vector3(14f, 3.7f, 34f),
+            new Vector3(-29f, 5.3f, 67f), new Vector3(36f, 6.6f, 78f),
+            new Vector3(-49f, 7.8f, 102f), new Vector3(47f, 7.2f, 105f),
+            new Vector3(-19f, 4.5f, 119f), new Vector3(20f, 5.3f, 135f)
+        };
+
+        foreach (Vector3 location in locations)
         {
-            var group = new GameObject("Wooded Island").transform;
-            group.SetParent(scenery.transform);
-            group.position = position;
-            islands.Add((group, position.z));
-            GameObject island = AddModel(islandTile, group, position, 5f, random.Next(360), atlasMaterial);
-            Bounds bounds = island.GetComponentInChildren<Renderer>().bounds;
-            for (int i = 0; i < 11; i++)
+            int index = islands.Count;
+            var group = new GameObject("Lagoon Island " + (index + 1)).transform;
+            group.SetParent(parent, false);
+            group.position = new Vector3(location.x, SurfaceHeight - 0.48f, location.z);
+            islands.Add((group, location.z));
+
+            GameObject shore = AddModel(terrain, group, group.position, location.y, random.Next(360), material);
+            Bounds baseBounds = shore.GetComponentInChildren<Renderer>().bounds;
+            if (location.y >= 5f)
             {
-                float angle = (float)random.NextDouble() * Mathf.PI * 2f;
-                float radius = 0.7f + (float)random.NextDouble() * 3.25f;
-                Vector3 treePosition = new Vector3(bounds.center.x + Mathf.Cos(angle) * radius,
-                                                   bounds.max.y - 0.12f,
-                                                   bounds.center.z + Mathf.Sin(angle) * radius);
-                AddModel(i % 3 == 0 ? oak : pine, group, treePosition,
-                         0.8f + (float)random.NextDouble() * 0.9f, random.Next(360), atlasMaterial);
+                Vector3 hill = baseBounds.center + new Vector3(baseBounds.extents.x * 0.17f, 0f, baseBounds.extents.z * 0.12f);
+                hill.y = baseBounds.max.y - 0.75f;
+                GameObject upperGrass = AddModel(terrain, group, hill, location.y * 0.49f, random.Next(360), material);
+                Bounds hillBounds = upperGrass.GetComponentInChildren<Renderer>().bounds;
+                AddGrove(group, hillBounds, pine, oak, material, random, 5, 0.7f);
             }
+
+            AddGrove(group, baseBounds, pine, oak, material, random, location.y >= 5f ? 10 : 5, 0.88f);
+            DecorateIsland(group, material, index);
+        }
+    }
+
+    private static void AddGrove(Transform group, Bounds terrain, GameObject pine, GameObject oak,
+                                 Material material, System.Random random, int count, float ring)
+    {
+        float radius = Mathf.Min(terrain.extents.x, terrain.extents.z) * ring;
+        for (int i = 0; i < count; i++)
+        {
+            float angle = (i + (float)random.NextDouble() * 0.45f) * Mathf.PI * 2f / count;
+            float distance = radius * (0.62f + (float)random.NextDouble() * 0.34f);
+            Vector3 point = terrain.center + new Vector3(Mathf.Cos(angle) * distance, 0f, Mathf.Sin(angle) * distance);
+            point.y = terrain.max.y - 0.12f;
+            float scale = 0.7f + (float)random.NextDouble() * 0.75f;
+            AddModel(i % 3 == 0 ? oak : pine, group, point, scale, random.Next(360), material);
+        }
+    }
+
+    private void DecorateIsland(Transform island, Material atlasMaterial, int index)
+    {
+        if (island.childCount == 0)
+            return;
+
+        Renderer terrain = island.GetChild(0).GetComponentInChildren<Renderer>();
+        if (terrain == null)
+            return;
+
+        var rocks = Resources.Load<GameObject>("BarnPieces/Scenery/rocks");
+        var flowers = Resources.Load<GameObject>("BarnPieces/Scenery/flowers");
+        var mushrooms = Resources.Load<GameObject>("BarnPieces/Scenery/mushrooms");
+        var pine = Resources.Load<GameObject>("BarnPieces/Scenery/tree-pine-small");
+        if (rocks == null || flowers == null || mushrooms == null || pine == null)
+            return;
+
+        Bounds bounds = terrain.bounds;
+        var detail = new GameObject("Island Details").transform;
+        detail.SetParent(island, false);
+        var random = new System.Random(527 + index);
+        float radius = Mathf.Min(bounds.extents.x, bounds.extents.z);
+        for (int i = 0; i < 13; i++)
+        {
+            float angle = (i + random.Next(0, 90) / 100f) * Mathf.PI * 2f / 13f;
+            Vector3 direction = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
+            float distance = radius * (i < 3 ? 1.03f : 0.70f + (float)random.NextDouble() * 0.14f);
+            Vector3 point = bounds.center + direction * distance;
+            point.y = i < 3 ? SurfaceHeight - 0.12f : bounds.max.y - 0.075f;
+            GameObject model = i < 3 ? rocks : i < 7 ? flowers : i < 11 ? mushrooms : pine;
+            float scale = i < 3 ? 1.8f : 0.75f + (float)random.NextDouble() * 0.56f;
+            AddModel(model, detail, point, scale, random.Next(360), atlasMaterial);
         }
     }
 
@@ -62,6 +155,7 @@ public class BarnBackdrop : MonoBehaviour
         if (followCamera == null)
             return;
 
+        UpdateRipple();
         Vector3 center = followCamera.transform.position;
         const float detailStep = 24f;
         detailWater.position = new Vector3(Mathf.Round(center.x / detailStep) * detailStep, detailWater.position.y,
@@ -77,6 +171,27 @@ public class BarnBackdrop : MonoBehaviour
         }
     }
 
+    public void Splash(Vector3 position)
+    {
+        splashPosition = position;
+        splashTime = Time.time;
+        rippleVisible = true;
+        UpdateRipple();
+    }
+
+    private void UpdateRipple()
+    {
+        if (!rippleVisible || waterRenderer == null)
+            return;
+
+        rippleProperties ??= new MaterialPropertyBlock();
+        float age = Time.time - splashTime;
+        rippleVisible = age < 1.35f;
+        waterRenderer.GetPropertyBlock(rippleProperties);
+        rippleProperties.SetVector("_Splash", new Vector4(splashPosition.x, splashPosition.z, age, rippleVisible ? 1f : 0f));
+        waterRenderer.SetPropertyBlock(rippleProperties);
+    }
+
     private static GameObject AddModel(GameObject asset, Transform parent, Vector3 position,
                                        float scale, float angle, Material material)
     {
@@ -89,40 +204,19 @@ public class BarnBackdrop : MonoBehaviour
 
     private void BuildWater(Transform parent)
     {
-        const int size = 48;
-        const float spacing = 6f;
-        var vertices = new List<Vector3>();
-        var facets = new List<int>[] { new List<int>(), new List<int>(), new List<int>() };
-        var random = new System.Random(100);
-        for (int z = 0; z < size; z++)
-        {
-            for (int x = 0; x < size; x++)
-            {
-                Vector3 a = WaterPoint(x, z, size, spacing);
-                Vector3 b = WaterPoint(x + 1, z, size, spacing);
-                Vector3 c = WaterPoint(x, z + 1, size, spacing);
-                Vector3 d = WaterPoint(x + 1, z + 1, size, spacing);
-                bool outer = x < 5 || z < 5 || x >= size - 5 || z >= size - 5;
-                AddFacet(a, c, b, vertices, facets[outer ? 1 : random.Next(facets.Length)]);
-                AddFacet(b, c, d, vertices, facets[outer ? 1 : random.Next(facets.Length)]);
-            }
-        }
-
-        var water = new GameObject("Faceted Water");
+        var water = new GameObject("Lagoon Water");
         detailWater = water.transform;
         detailWater.SetParent(parent, false);
-        waterMesh = new Mesh { name = "Barn Water Facets" };
-        waterMesh.SetVertices(vertices);
-        waterMesh.subMeshCount = facets.Length;
-        for (int i = 0; i < facets.Length; i++)
-            waterMesh.SetTriangles(facets[i], i);
-        waterMesh.RecalculateNormals();
+        waterMesh = new Mesh { name = "Barn Smooth Water" };
+        BuildSurface(waterMesh);
         water.AddComponent<MeshFilter>().sharedMesh = waterMesh;
-        var shader = Shader.Find("Universal Render Pipeline/Unlit");
-        waterMaterials.Add(new Material(shader) { color = new Color(0.29f, 0.67f, 0.82f) });
-        waterMaterials.Add(new Material(shader) { color = new Color(0.33f, 0.72f, 0.85f) });
-        waterMaterials.Add(new Material(shader) { color = new Color(0.36f, 0.75f, 0.87f) });
-        water.AddComponent<MeshRenderer>().sharedMaterials = waterMaterials.ToArray();
+        var shader = Shader.Find("Pogo Barn/Animated Water") ?? Shader.Find("Universal Render Pipeline/Unlit");
+        nearMaterial = new Material(shader);
+        farMaterial = new Material(shader);
+        farMaterial.SetFloat("_WaveHeight", 0f);
+        farMaterial.SetFloat("_Detail", 0f);
+        waterRenderer = water.AddComponent<MeshRenderer>();
+        waterRenderer.sharedMaterial = nearMaterial;
 
         var horizon = new GameObject("Ocean Horizon");
         horizonWater = horizon.transform;
@@ -138,31 +232,46 @@ public class BarnBackdrop : MonoBehaviour
         horizonMesh.triangles = new[] { 0, 1, 2, 2, 1, 3 };
         horizonMesh.RecalculateNormals();
         horizon.AddComponent<MeshFilter>().sharedMesh = horizonMesh;
-        horizon.AddComponent<MeshRenderer>().sharedMaterial = waterMaterials[1];
+        horizon.AddComponent<MeshRenderer>().sharedMaterial = farMaterial;
     }
 
-    private static Vector3 WaterPoint(int x, int z, int size, float spacing)
+    public static void BuildSurface(Mesh mesh)
     {
-        float wave = Mathf.Sin(x * 1.57f + z * 0.74f) * 0.2f;
-        float stagger = z % 2 == 0 ? 0f : spacing * 0.5f;
-        return new Vector3((x - size / 2) * spacing + stagger, WaterHeight + wave, (z - size / 2) * spacing);
-    }
+        const int segments = 96;
+        const float spacing = 3f;
+        int stride = segments + 1;
+        var vertices = new Vector3[stride * stride];
+        var triangles = new int[segments * segments * 6];
+        int index = 0;
+        for (int z = 0; z < stride; z++)
+        {
+            for (int x = 0; x < stride; x++)
+            {
+                int corner = z * stride + x;
+                vertices[corner] = new Vector3((x - segments * 0.5f) * spacing, WaterHeight,
+                                               (z - segments * 0.5f) * spacing);
+                if (x == segments || z == segments)
+                    continue;
+                triangles[index++] = corner;
+                triangles[index++] = corner + stride;
+                triangles[index++] = corner + 1;
+                triangles[index++] = corner + 1;
+                triangles[index++] = corner + stride;
+                triangles[index++] = corner + stride + 1;
+            }
+        }
 
-    private static void AddFacet(Vector3 a, Vector3 b, Vector3 c,
-                                 List<Vector3> vertices, List<int> indices)
-    {
-        indices.Add(vertices.Count);
-        indices.Add(vertices.Count + 1);
-        indices.Add(vertices.Count + 2);
-        vertices.Add(a);
-        vertices.Add(b);
-        vertices.Add(c);
+        mesh.Clear();
+        mesh.vertices = vertices;
+        mesh.triangles = triangles;
+        mesh.RecalculateNormals();
+        mesh.bounds = new Bounds(Vector3.up * WaterHeight, new Vector3(segments * spacing, 0.6f, segments * spacing));
     }
 
     private void OnDestroy()
     {
-        foreach (Material material in waterMaterials)
-            Destroy(material);
+        Destroy(nearMaterial);
+        Destroy(farMaterial);
         Destroy(waterMesh);
         Destroy(horizonMesh);
     }
