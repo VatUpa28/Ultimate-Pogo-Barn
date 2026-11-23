@@ -161,8 +161,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4ac23dae801d5aa40912878a6bfc3559, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerController
-  moveAction: {fileID: 0}
-  jumpAction: {fileID: 0}
+  useTrackSteering: 0
+  moveAction: {fileID: -1924755808433624251, guid: d8e59561a958e7e48a27557eff3c94e9, type: 3}
+  jumpAction: {fileID: -4805806112263409829, guid: d8e59561a958e7e48a27557eff3c94e9, type: 3}
   playerVisuals: {fileID: 0}
   groundCheck: {fileID: 0}
   modelHeightOffset: 0
