@@ -18,7 +18,7 @@ public partial class BarnBuildRounds : MonoBehaviour
     private const int SectionRows = 5;
     private const int SideColumn = 2;
 
-    private enum Piece { Grass, Ramp, Barrel, Crate, Posts, Spikes, Wall, Bridge, Chicane, Terrace, Runway, Saw, Barrier }
+    private enum Piece { Grass, Ramp, Barrel, Crate, Posts, Spikes, Wall, Bridge, Chicane, Terrace, Runway, Saw, Barrier, Gap }
 
     [System.Serializable]
     private class PrefabOption
@@ -76,16 +76,20 @@ public partial class BarnBuildRounds : MonoBehaviour
     private Vector3 viewCenter;
     private Piece selectedPiece;
     private int round = 1;
-    private bool placedThisRound;
     private int nextRow = -(SectionRows / 2);
     private float nextHeight;
     private Vector3 hoverPosition;
     private Quaternion hoverRotation = Quaternion.identity;
     private bool validPlacement;
 
-    private bool IsSection => selectedPrefab != null
-        ? IsPlatformPrefab(selectedPrefab.prefab)
-        : System.Array.IndexOf(Blueprints, selectedPiece) >= 0;
+    private bool IsSection => IsPlatform(selectedPiece, selectedPrefab);
+    private bool PlacementComplete => sectionAddedThisRound ||
+        obstaclePlacements >= (flagGroup == null ? 1 : ObstaclePlacementLimit);
+
+    private static bool IsPlatform(Piece piece, PrefabOption option = null)
+    {
+        return option != null ? IsPlatformPrefab(option.prefab) : System.Array.IndexOf(Blueprints, piece) >= 0;
+    }
 
     private float MenuWidth => Mathf.Min(PanelWidth, Screen.width * 0.4f);
 
@@ -103,13 +107,12 @@ public partial class BarnBuildRounds : MonoBehaviour
             }
         }
 
-        string[] iconNames = { "block-grass", "block-grass-large-slope", "barrel", "crate", "poles", "trap-spikes", "brick" };
-        for (int i = 0; i < iconNames.Length; i++)
-            icons[i] = i == (int)Piece.Spikes ? Resources.Load<Texture2D>("BarnCourse/Dungeon/Previews/trap") : Resources.Load<Texture2D>("BarnPieces/Icons/" + iconNames[i]);
+        for (int i = 0; i < ModelNames.Length; i++)
+            icons[i] = i == (int)Piece.Spikes ? Resources.Load<Texture2D>("BarnCourse/Dungeon/Previews/trap") : Resources.Load<Texture2D>("BarnPieces/Icons/" + ModelNames[i]);
 
-        modelMaterial = new Material(Shader.Find("Pogo Barn/Cartoon Lit") ?? Shader.Find("Universal Render Pipeline/Lit"));
-        modelMaterial.mainTexture = Resources.Load<Texture2D>("BarnPieces/colormap");
-        previewMaterial = new Material(Shader.Find("Pogo Barn/Cartoon Lit") ?? Shader.Find("Universal Render Pipeline/Lit"));
+        Shader shader = Shader.Find("Pogo Barn/Cartoon Lit") ?? Shader.Find("Universal Render Pipeline/Lit");
+        modelMaterial = new Material(shader) { mainTexture = Resources.Load<Texture2D>("BarnPieces/colormap") };
+        previewMaterial = new Material(shader);
         pieces = new GameObject("Map Pieces").transform;
         pieces.SetParent(transform);
 
@@ -201,43 +204,49 @@ public partial class BarnBuildRounds : MonoBehaviour
         foreach (Transform blade in sawBlades)
             if (blade) blade.Rotate(0f, 0f, 390f * Time.deltaTime, Space.Self);
 
-        if (phase == RoundPhase.Menu || phase == RoundPhase.Won || phase == RoundPhase.SelectingCharacter)
-        {
-            mapCamera.rect = new Rect(0f, 0f, 1f, 1f);
-            return;
-        }
+        bool building = phase == RoundPhase.Choosing || phase == RoundPhase.Placing;
+        float sidebar = building ? MenuWidth / Screen.width : 0f;
+        mapCamera.rect = new Rect(sidebar, 0f, 1f - sidebar, 1f);
+        if (building) MoveCamera();
 
         if (phase == RoundPhase.Riding)
+            UpdateRide();
+        else if (phase == RoundPhase.Placing)
+            UpdatePlacementPreview();
+    }
+
+    private void UpdateRide()
+    {
+        runTime += Time.deltaTime;
+        if (rider == null) return;
+
+        Vector3 position = rider.transform.position;
+        float waterHeight = backdrop.SurfaceHeight;
+        if (!riderInWater && position.y - 0.5f <= waterHeight)
         {
-            mapCamera.rect = new Rect(0f, 0f, 1f, 1f);
-            runTime += Time.deltaTime;
-            if (rider != null)
-            {
-                Vector3 position = rider.transform.position;
-                if (!riderInWater && position.y - 0.5f <= backdrop.SurfaceHeight)
-                {
-                    backdrop.Splash(position);
-                    BurstAt(new Vector3(position.x, backdrop.SurfaceHeight, position.z), new Color(0.25f, 0.85f, 1f), 28);
-                    riderInWater = true;
-                }
-                if (position.y < backdrop.SurfaceHeight - 2.1f || HitsHazard(position))
-                {
-                    RespawnAtFlag(position);
-                    return;
-                }
-                CheckCourseFlag(previousRiderPosition, position);
-                previousRiderPosition = position;
-            }
+            backdrop.Splash(position);
+            BurstAt(new Vector3(position.x, waterHeight, position.z), new Color(0.25f, 0.85f, 1f), 28);
+            riderInWater = true;
+        }
+        if (position.y < waterHeight - 2.1f || HitsHazard(position))
+        {
+            RespawnAtFlag(position);
             return;
         }
 
-        float menuFraction = MenuWidth / Screen.width;
-        mapCamera.rect = new Rect(menuFraction, 0f, 1f - menuFraction, 1f);
-        MoveCamera();
-        if (phase != RoundPhase.Placing)
-            return;
+        CheckCourseFlag(previousRiderPosition, position);
+        previousRiderPosition = position;
+    }
 
-        if (IsWall && !placedThisRound && Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
+    private void UpdatePlacementPreview()
+    {
+        if (PlacementComplete)
+        {
+            preview.SetActive(false);
+            return;
+        }
+
+        if (IsWall && Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
             wallQuarterTurns = (wallQuarterTurns + 1) % 4;
 
         Mouse mouse = Mouse.current;
@@ -247,11 +256,11 @@ public partial class BarnBuildRounds : MonoBehaviour
         {
             Ray ray = mapCamera.ScreenPointToRay(mouse.position.ReadValue());
             UpdatePlacement(ray);
-            if (mouse.leftButton.wasPressedThisFrame && !placedThisRound && validPlacement)
+            if (mouse.leftButton.wasPressedThisFrame && validPlacement)
                 PlacePiece();
         }
 
-        preview.SetActive(pointerOverMap && !placedThisRound);
+        preview.SetActive(pointerOverMap && !PlacementComplete);
         preview.transform.SetPositionAndRotation(hoverPosition + hoverRotation * Vector3.up * 0.035f, hoverRotation);
         previewMaterial.color = validPlacement ? new Color(0.28f, 0.88f, 0.36f) : new Color(0.94f, 0.18f, 0.16f);
     }
@@ -277,10 +286,9 @@ public partial class BarnBuildRounds : MonoBehaviour
 
         bool hitTrack = RaycastTrack(ray, 300f, out RaycastHit hit);
         var gridPlane = new Plane(Vector3.up, Vector3.up * viewCenter.y);
-        if (!hitTrack && !gridPlane.Raycast(ray, out _))
+        float distance = 0f;
+        if (!hitTrack && !gridPlane.Raycast(ray, out distance))
             return;
-
-        gridPlane.Raycast(ray, out float distance);
         Vector3 point = hitTrack ? hit.point : ray.GetPoint(distance);
         selectedCell = new Vector2Int(Mathf.RoundToInt(point.x / CellSize),
                                       Mathf.RoundToInt(point.z / CellSize));
@@ -400,7 +408,7 @@ public partial class BarnBuildRounds : MonoBehaviour
         GUILayout.BeginArea(new Rect(0f, 0f, MenuWidth, Screen.height), GUI.skin.box);
         menuScroll = GUILayout.BeginScrollView(menuScroll);
         GUILayout.Label("Build Round " + round, menuHeading);
-        GUI.enabled = !placedThisRound;
+        GUI.enabled = !PlacementComplete;
         GUILayout.Label("Platforms");
         GUILayout.BeginHorizontal();
         DrawChoice(Piece.Grass);
@@ -422,12 +430,13 @@ public partial class BarnBuildRounds : MonoBehaviour
         GUI.enabled = true;
 
         GUILayout.Space(6f);
-        if (placedThisRound)
+        if (PlacementComplete)
         {
             if (GUILayout.Button("End Round", GUILayout.Height(28f)))
             {
                 round++;
-                placedThisRound = false;
+                sectionAddedThisRound = false;
+                obstaclePlacements = 0;
                 Choose(Piece.Grass);
             }
         }
@@ -520,10 +529,6 @@ public partial class BarnBuildRounds : MonoBehaviour
     private void EndRide()
     {
         RemoveRider();
-        phase = RoundPhase.Choosing;
-        placedThisRound = false;
-        sectionAddedThisRound = false;
-        obstaclePlacements = 0;
         FocusFront();
         buildYaw = buildCameraRotation.eulerAngles.y;
         buildPitch = 32f;
@@ -595,7 +600,7 @@ public partial class BarnBuildRounds : MonoBehaviour
 
     private void PlacePiece()
     {
-        if (placedThisRound || (!IsSection && obstacles.Contains(selectedCell)))
+        if (PlacementComplete || (!IsSection && obstacles.Contains(selectedCell)))
             return;
 
         if (IsSection)
@@ -628,7 +633,6 @@ public partial class BarnBuildRounds : MonoBehaviour
         }
 
         if (!IsSection) obstaclePlacements++;
-        placedThisRound = IsSection || flagGroup == null || obstaclePlacements >= ObstaclePlacementLimit;
     }
 
     private void FocusFront()
@@ -647,8 +651,7 @@ public partial class BarnBuildRounds : MonoBehaviour
 
     private GameObject CreateSection(Piece piece, Material material, bool solid)
     {
-        bool rising = piece == Piece.Ramp || piece == Piece.Terrace;
-        var section = new GameObject(rising ? "Ramp Section" : "Grass Platform Section");
+        var section = new GameObject(piece + " Section");
         for (int row = 0; row < SectionRows; row++)
         {
             Piece tilePiece = IsRampRow(piece, row) ? Piece.Ramp : Piece.Grass;
@@ -787,13 +790,8 @@ public partial class BarnBuildRounds : MonoBehaviour
 
     private static Bounds SitOnSurface(GameObject anchor)
     {
-        Renderer[] renderers = anchor.GetComponentsInChildren<Renderer>(true);
-        if (renderers.Length == 0)
-            return new Bounds();
-
-        Bounds bounds = renderers[0].bounds;
-        foreach (Renderer renderer in renderers)
-            bounds.Encapsulate(renderer.bounds);
+        Bounds bounds = GetBounds(anchor, true);
+        if (bounds.size == Vector3.zero) return bounds;
 
         Vector3 offset = new Vector3(-bounds.center.x, -bounds.min.y, -bounds.center.z);
         foreach (Transform child in anchor.transform)
@@ -813,12 +811,14 @@ public partial class BarnBuildRounds : MonoBehaviour
         return new Vector3(cell.x * CellSize, height, cell.y * CellSize);
     }
 
-    private static Bounds GetBounds(GameObject model)
+    private static Bounds GetBounds(GameObject model, bool includeInactive = false)
     {
-        Renderer[] renderers = model.GetComponentsInChildren<Renderer>();
+        Renderer[] renderers = model.GetComponentsInChildren<Renderer>(includeInactive);
+        if (renderers.Length == 0) return new Bounds();
+
         Bounds bounds = renderers[0].bounds;
-        foreach (Renderer renderer in renderers)
-            bounds.Encapsulate(renderer.bounds);
+        for (int i = 1; i < renderers.Length; i++)
+            bounds.Encapsulate(renderers[i].bounds);
         return bounds;
     }
 

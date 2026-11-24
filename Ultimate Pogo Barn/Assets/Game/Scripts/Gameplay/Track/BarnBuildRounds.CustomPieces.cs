@@ -52,21 +52,14 @@ public partial class BarnBuildRounds
             CopyPreviewGeometry(prefab.transform, geometry, keepMaterials);
         }
 
-        Renderer[] renderers = geometry.GetComponentsInChildren<Renderer>(true);
-        if (renderers.Length == 0)
-            return section;
-
-        Bounds bounds = renderers[0].bounds;
-        foreach (Renderer renderer in renderers)
-            bounds.Encapsulate(renderer.bounds);
+        Bounds bounds = GetBounds(geometry.gameObject, true);
+        if (bounds.size == Vector3.zero) return section;
 
         float width = (SideColumn * 2 + 1) * CellSize;
         float length = SectionRows * CellSize;
         geometry.localScale = new Vector3(width / Mathf.Max(.01f, bounds.size.x), 1f,
                                            length / Mathf.Max(.01f, bounds.size.z));
-        bounds = renderers[0].bounds;
-        foreach (Renderer renderer in renderers)
-            bounds.Encapsulate(renderer.bounds);
+        bounds = GetBounds(geometry.gameObject, true);
 
         Vector3 deckCenter = Vector3.forward * (CellSize * (SectionRows - 1) * .5f);
         Vector3 correction = deckCenter - new Vector3(bounds.center.x, bounds.max.y, bounds.center.z);

@@ -21,7 +21,7 @@ public partial class BarnBuildRounds
             return null;
         if ((int)piece < icons.Length)
             return icons[(int)piece];
-        return System.Array.IndexOf(Blueprints, piece) >= 0 ? icons[(int)Piece.Grass] : null;
+        return IsPlatform(piece) ? icons[(int)Piece.Grass] : null;
     }
 
     private void PreparePiecePhotos()
@@ -53,7 +53,7 @@ public partial class BarnBuildRounds
         }
         else
         {
-            model = System.Array.IndexOf(Blueprints, piece) >= 0
+            model = IsPlatform(piece)
                 ? CreateSection(piece, modelMaterial, false)
                 : CreateObstacle(piece, modelMaterial, true);
         }

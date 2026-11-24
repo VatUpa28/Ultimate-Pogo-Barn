@@ -170,20 +170,20 @@ public class PlayerController : MonoBehaviour
         if (jumpRequested)
         {
             ExecuteJump();
+            return;
         }
-        else if (useTrackSteering && currentState == PlayerState.Airborne)
+
+        if (!useTrackSteering) return;
+        if (currentState == PlayerState.Airborne)
         {
             ApplyTrackAirSteering();
+            return;
         }
-        else if (useTrackSteering)
-        {
-            Vector3 velocity = rb.linearVelocity;
-            float grip = Mathf.Exp(-6f * Time.fixedDeltaTime);
-            rb.linearVelocity = new Vector3(velocity.x * grip, velocity.y, velocity.z * grip);
-        }
-    }
 
-    // INPUT
+        Vector3 velocity = rb.linearVelocity;
+        float grip = Mathf.Exp(-6f * Time.fixedDeltaTime);
+        rb.linearVelocity = new Vector3(velocity.x * grip, velocity.y, velocity.z * grip);
+    }
 
     private void OnMove(InputAction.CallbackContext context)
     {
@@ -205,17 +205,11 @@ public class PlayerController : MonoBehaviour
 
     private void BeginJumpCharge()
     {
-        // Preserve the horizontal launch direction.
-        // The visual pitch does not affect jump direction.
-
-        lockedJumpDirection = new Vector3(
-            currentOrbitDirection.x,
-            0f,
-            currentOrbitDirection.z
-        ).normalized;
-
-        if (useTrackSteering)
-            UpdateTrackJumpAim();
+        lockedJumpDirection = currentOrbitDirection;
+        if (!useTrackSteering)
+            lockedJumpDirection = Vector3.ProjectOnPlane(lockedJumpDirection, Vector3.up).normalized;
+        else if (playerVisuals != null)
+            playerVisuals.localRotation = Quaternion.LookRotation(lockedJumpDirection);
 
         chargeTime = 0f;
         currentState = PlayerState.Charging;
@@ -231,13 +225,6 @@ public class PlayerController : MonoBehaviour
         {
             bufferedJumpReleased = true;
         }
-    }
-
-    private void UpdateTrackJumpAim()
-    {
-        lockedJumpDirection = currentOrbitDirection;
-        if (playerVisuals != null)
-            playerVisuals.localRotation = Quaternion.LookRotation(lockedJumpDirection);
     }
 
     private void UpdateTrackHeading()
@@ -262,8 +249,6 @@ public class PlayerController : MonoBehaviour
         rb.linearVelocity = new Vector3(steered.x, velocity.y, steered.y);
     }
 
-    // GROUNDED ORBIT
-
     private void HandleGroundedOrbit()
     {
         if (currentState != PlayerState.Grounded)
@@ -275,45 +260,17 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
-        // Continue rotating horizontally.
-
         orbitAngle += rotationSpeed * Time.deltaTime;
-
-        // Periodically choose new orbit parameters.
-
         radiusTimer += Time.deltaTime;
-
         if (radiusTimer >= radiusChangeInterval)
         {
             radiusTimer = 0f;
-
-            targetRadius = Random.Range(
-                minRadius,
-                maxRadius
-            );
-
-            targetOrbitPitch = Random.Range(
-                minOrbitPitch,
-                maxOrbitPitch
-            );
+            targetRadius = Random.Range(minRadius, maxRadius);
+            targetOrbitPitch = Random.Range(minOrbitPitch, maxOrbitPitch);
         }
 
-        // Smoothly transition radius.
-
-        currentRadius = Mathf.MoveTowards(
-            currentRadius,
-            targetRadius,
-            radiusChangeSpeed * Time.deltaTime
-        );
-
-        // Smoothly transition downward pitch.
-
-        currentOrbitPitch = Mathf.MoveTowards(
-            currentOrbitPitch,
-            targetOrbitPitch,
-            pitchChangeSpeed * Time.deltaTime
-        );
-
+        currentRadius = Mathf.MoveTowards(currentRadius, targetRadius, radiusChangeSpeed * Time.deltaTime);
+        currentOrbitPitch = Mathf.MoveTowards(currentOrbitPitch, targetOrbitPitch, pitchChangeSpeed * Time.deltaTime);
         UpdateOrbitDirection();
         UpdateModelPosition();
     }
@@ -348,41 +305,15 @@ public class PlayerController : MonoBehaviour
         if (playerVisuals == null)
             return;
 
-        // Move the entire visual assembly around PlayerRoot.
-
-        playerVisuals.localPosition =
-            currentOrbitDirection * currentRadius +
-            Vector3.up * modelHeightOffset;
-
-        // Face in the direction of the orbit,
-        // including its downward pitch.
-
-        playerVisuals.localRotation =
-            Quaternion.LookRotation(
-                currentOrbitDirection,
-                Vector3.up
-            );
+        playerVisuals.localPosition = currentOrbitDirection * currentRadius + Vector3.up * modelHeightOffset;
+        playerVisuals.localRotation = Quaternion.LookRotation(currentOrbitDirection, Vector3.up);
     }
-
-    // JUMP CHARGING
 
     private void HandleJumpCharge()
     {
-        if (currentState != PlayerState.Charging)
-            return;
-
-        if (jumpRequested)
-            return;
-
-        chargeTime += Time.deltaTime;
-
-        chargeTime = Mathf.Min(
-            chargeTime,
-            JumpChargeDuration
-        );
+        if (currentState == PlayerState.Charging && !jumpRequested)
+            chargeTime = Mathf.Min(chargeTime + Time.deltaTime, JumpChargeDuration);
     }
-
-    // JUMP EXECUTION
 
     private void ExecuteJump()
     {
@@ -432,74 +363,27 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
-        // Horizontal input controls yaw.
-
-        playerVisuals.Rotate(
-            Vector3.up,
-            moveInput.x * airRotationSpeed * Time.deltaTime,
-            Space.World
-        );
-
-        // Vertical input controls pitch.
-
-        playerVisuals.Rotate(
-            Vector3.right,
-            moveInput.y * airRotationSpeed * Time.deltaTime,
-            Space.Self
-        );
+        playerVisuals.Rotate(Vector3.up, moveInput.x * airRotationSpeed * Time.deltaTime, Space.World);
+        playerVisuals.Rotate(Vector3.right, moveInput.y * airRotationSpeed * Time.deltaTime, Space.Self);
     }
-
-    // GROUND DETECTION
 
     private void CheckGround()
     {
-        if (currentState == PlayerState.Charging)
+        if (currentState == PlayerState.Charging || groundCheck == null || rb.linearVelocity.y > 0.1f)
             return;
 
-        if (groundCheck == null)
-            return;
-
-        // Only check for landing while descending
-        // or nearly stationary.
-
-        if (rb.linearVelocity.y > 0.1f)
-            return;
-
-        bool foundGround = Physics.SphereCast(
-            groundCheck.position,
-            groundCheckRadius,
-            Vector3.down,
-            out RaycastHit hit,
-            groundCheckDistance,
-            groundLayer,
-            QueryTriggerInteraction.Ignore
-        );
-
-        if (foundGround)
+        bool foundGround = Physics.SphereCast(groundCheck.position, groundCheckRadius, Vector3.down,
+            out RaycastHit hit, groundCheckDistance, groundLayer, QueryTriggerInteraction.Ignore);
+        if (foundGround && hit.normal.y > 0.5f && hit.collider.GetComponentInParent<PogoSurface>() != null)
         {
-            PogoSurface surface =
-                hit.collider.GetComponentInParent<PogoSurface>();
-
-            if (surface != null && hit.normal.y > 0.5f)
-            {
-                currentState = PlayerState.Grounded;
-
-                if (rb.linearVelocity.y < 0f)
-                {
-                    rb.linearVelocity = new Vector3(
-                        rb.linearVelocity.x,
-                        0f,
-                        rb.linearVelocity.z
-                    );
-                }
-
-                return;
-            }
+            currentState = PlayerState.Grounded;
+            Vector3 velocity = rb.linearVelocity;
+            if (velocity.y < 0f)
+                rb.linearVelocity = new Vector3(velocity.x, 0f, velocity.z);
+            return;
         }
 
         if (currentState == PlayerState.Grounded)
-        {
             currentState = PlayerState.Airborne;
-        }
     }
 }

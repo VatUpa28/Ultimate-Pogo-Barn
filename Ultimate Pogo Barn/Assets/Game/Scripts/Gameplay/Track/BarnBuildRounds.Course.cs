@@ -28,7 +28,7 @@ public partial class BarnBuildRounds
 
     private static readonly Piece[] Blueprints =
     {
-        Piece.Grass, Piece.Ramp, Piece.Bridge, Piece.Chicane, Piece.Terrace, Piece.Runway
+        Piece.Grass, Piece.Ramp, Piece.Bridge, Piece.Chicane, Piece.Terrace, Piece.Runway, Piece.Gap
     };
 
     private void SetupCourse()
@@ -85,7 +85,7 @@ public partial class BarnBuildRounds
             Vector3 flag = courseFlags[i];
             float front = flag.z - 0.65f;
             if (to.z < front || from.z >= front) continue;
-            float fraction = to.z > from.z ? Mathf.Clamp01((front - from.z) / (to.z - from.z)) : 1f;
+            float fraction = (front - from.z) / (to.z - from.z);
             Vector3 crossing = Vector3.Lerp(from, to, fraction);
             if (Mathf.Abs(crossing.x - flag.x) > CellSize * (SideColumn + 0.5f) ||
                 crossing.y < flag.y - 0.2f || crossing.y > flag.y + 3.6f) continue;
@@ -154,7 +154,6 @@ public partial class BarnBuildRounds
         runTime = 0f;
         round = 1;
         noticeUntil = 0f;
-        placedThisRound = false;
         sectionAddedThisRound = false;
         obstaclePlacements = 0;
         nextHeight = 0f;
@@ -286,7 +285,6 @@ public partial class BarnBuildRounds
         GUILayout.Label("Round " + round, menuHeading);
         if (phase == RoundPhase.Riding)
         {
-            GUILayout.Label("Reach the flag to build. Tap Space for a low jump, or hold and release for height.");
             var controller = rider != null ? rider.GetComponent<PlayerController>() : null;
             if (controller != null && controller.IsCharging)
             {
@@ -302,11 +300,11 @@ public partial class BarnBuildRounds
         }
         else
         {
-            if (!placedThisRound)
+            if (!PlacementComplete)
             {
                 GUILayout.Label(IsSection ? "Place one platform at the end of the course."
                     : $"Place the same obstacle up to three times   {obstaclePlacements}/{ObstaclePlacementLimit}");
-                GUILayout.Label("WASD pan · Right drag orbit · Scroll zoom · Q/E height");
+                GUILayout.Label("WASD pan / Right drag orbit / Scroll zoom /Q/E height");
                 if (IsWall) GUILayout.Label("R rotates the wall.");
                 if (obstaclePlacements == 0 && GUILayout.Button("Change piece", button, GUILayout.Height(34)))
                 {
@@ -363,7 +361,6 @@ public partial class BarnBuildRounds
         foreach (PrefabOption option in customPrefabs)
             if (option != null && option.prefab && !IsPlatformPrefab(option.prefab)) obstaclePool.Add((Piece.Barrel, option));
         DrawFrom(obstaclePool, 2);
-        placedThisRound = false;
         preview.SetActive(false);
         phase = RoundPhase.Choosing;
     }
@@ -394,8 +391,7 @@ public partial class BarnBuildRounds
         for (int i = 0; i < offers.Count; i++)
         {
             var offer = offers[i];
-            bool platform = offer.custom != null ? IsPlatformPrefab(offer.custom.prefab)
-                : System.Array.IndexOf(Blueprints, offer.piece) >= 0;
+            bool platform = IsPlatform(offer.piece, offer.custom);
             string label = offer.custom != null
                 ? (string.IsNullOrWhiteSpace(offer.custom.displayName) ? offer.custom.prefab.name : offer.custom.displayName)
                 : (offer.piece == Piece.Grass ? "Platform" : offer.piece.ToString());
@@ -404,7 +400,7 @@ public partial class BarnBuildRounds
             GUI.color = PiecePhotoBackground;
             GUI.DrawTexture(card, Texture2D.whiteTexture);
             GUI.color = previous;
-            GUI.Label(new Rect(card.x + 10, card.y + 5, card.width - 20, 22), platform ? "Platform · 1 placement" : "Obstacle · up to 3", categoryStyle);
+            GUI.Label(new Rect(card.x + 10, card.y + 5, card.width - 20, 22), platform ? "Platform - 1 placement" : "Obstacle - up to 3", categoryStyle);
             Texture photo = GetPiecePhoto(offer.piece, offer.custom);
             if (photo != null)
                 GUI.DrawTexture(new Rect(card.x + 5, card.y + 26, card.width - 10, card.height - 73), photo, ScaleMode.ScaleToFit, false);
@@ -422,6 +418,7 @@ public partial class BarnBuildRounds
     private static bool HasSectionTile(Piece piece, int column, int row)
     {
         if (row == 0 || row == SectionRows - 1) return true;
+        if (piece == Piece.Gap) return row != SectionRows / 2;
         if (piece == Piece.Bridge) return Mathf.Abs(column) <= 1 || (row != 2 && column == 2);
         if (piece == Piece.Runway) return Mathf.Abs(column) <= 1;
         if (piece == Piece.Chicane) return row < 3 ? column >= -1 : column <= 1;

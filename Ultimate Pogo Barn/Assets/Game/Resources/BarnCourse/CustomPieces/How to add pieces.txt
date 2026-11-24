@@ -1,6 +1,0 @@
-Make a prefab from your GameObject and give its root one of these tags.
-
-BarnObstacle adds it to the obstacle choices. Use a collider on the Default layer for a solid surface.
-BarnPlatform adds it to the platform choices. Use a flat 3D deck. The game fits it to a 5 by 5 section and adds a box collider if it has no solid collider.
-
-Save the prefab in this folder. Its filename is the name shown in the chooser.

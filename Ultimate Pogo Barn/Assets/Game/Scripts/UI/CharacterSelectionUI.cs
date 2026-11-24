@@ -26,16 +26,8 @@ public class CharacterSelectionUI : MonoBehaviour
 
     public void Open()
     {
-        browseIndex = 0;
-        string saved = PlayerPrefs.GetString(PreferenceKey);
-        for (int index = 1; index < ChoiceCount; index++)
-        {
-            CharacterData character = database.GetCharacter(index - 1);
-            if (character == null || character.name != saved) continue;
-            browseIndex = index;
-            break;
-        }
-
+        CharacterData saved = GetSavedCharacter();
+        browseIndex = saved != null ? database.characters.IndexOf(saved) + 1 : 0;
         isOpen = true;
         photoPending = true;
     }
@@ -128,11 +120,18 @@ public class CharacterSelectionUI : MonoBehaviour
 
     public void ApplyToRider(GameObject rider)
     {
-        string saved = PlayerPrefs.GetString(PreferenceKey);
-        if (database == null || string.IsNullOrEmpty(saved)) return;
-        CharacterData character = database.characters.Find(entry => entry != null && entry.name == saved);
+        CharacterData character = GetSavedCharacter();
+        if (character == null) return;
         Transform holder = rider.transform.Find(ModelPath);
         if (holder != null && holder.childCount > 0) SetAnimal(holder.GetChild(0), character);
+    }
+
+    private CharacterData GetSavedCharacter()
+    {
+        string saved = PlayerPrefs.GetString(PreferenceKey);
+        return database == null || string.IsNullOrEmpty(saved)
+            ? null
+            : database.characters.Find(character => character != null && character.name == saved);
     }
 
     private static void SetAnimal(Transform defaultAnimal, CharacterData character)
