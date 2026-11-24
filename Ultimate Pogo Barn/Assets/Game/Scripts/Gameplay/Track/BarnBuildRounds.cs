@@ -47,12 +47,18 @@ public partial class BarnBuildRounds : MonoBehaviour
     [SerializeField] private Font menuFont;
     [SerializeField] private CharacterDatabase characterDatabase;
     private CharacterSelectionUI characterSelection;
+    private CharacterSelectionUI characterSelectionPlayer2;
+    private CharacterSelectionUI activeCharacterSelection;
     private GUISkin menuSkin;
     private GUIStyle menuHeading;
 
     private enum RoundPhase { Menu, Riding, Choosing, Placing, Won, SelectingCharacter }
     private RoundPhase phase;
     private GameObject rider;
+    private GameObject riderPlayer2;
+    private Camera player2Camera;
+    private InputAction[] playerMoveActions;
+    private InputAction[] playerJumpActions;
     private int wallQuarterTurns;
     private bool IsWall => selectedPrefab == null && selectedPiece == Piece.Wall;
     private Vector3 spawnPoint;
@@ -60,6 +66,8 @@ public partial class BarnBuildRounds : MonoBehaviour
     private readonly HashSet<Vector2Int> hazardCells = new HashSet<Vector2Int>();
     private BarnBackdrop backdrop;
     private bool riderInWater;
+    private bool player2InWater;
+    private Vector3 previousPlayer2Position;
     private Quaternion buildCameraRotation;
     private int firstRow = -(SectionRows / 2);
     private readonly List<(Piece piece, PrefabOption custom)> offers = new List<(Piece, PrefabOption)>();
@@ -136,7 +144,16 @@ public partial class BarnBuildRounds : MonoBehaviour
         if (pogoPlayerPrefab != null)
         {
             characterSelection = gameObject.AddComponent<CharacterSelectionUI>();
-            characterSelection.Initialize(characterDatabase, pogoPlayerPrefab, PhotographCharacter);
+            characterSelection.Initialize(characterDatabase, pogoPlayerPrefab, PhotographCharacter, 0);
+            characterSelectionPlayer2 = gameObject.AddComponent<CharacterSelectionUI>();
+            characterSelectionPlayer2.Initialize(characterDatabase, pogoPlayerPrefab, PhotographCharacter, 1);
+            activeCharacterSelection = characterSelection;
+            playerMoveActions = new[] { CreateMoveAction(0), CreateMoveAction(1) };
+            playerJumpActions = new[]
+            {
+                new InputAction("Jump P1", InputActionType.Button, "<Keyboard>/space"),
+                new InputAction("Jump P2", InputActionType.Button, "<Keyboard>/enter")
+            };
             SetupCourse();
         }
         else
@@ -204,35 +221,27 @@ public partial class BarnBuildRounds : MonoBehaviour
         if (phase == RoundPhase.Menu || phase == RoundPhase.Won || phase == RoundPhase.SelectingCharacter)
         {
             mapCamera.rect = new Rect(0f, 0f, 1f, 1f);
+            if (player2Camera != null) player2Camera.enabled = false;
             return;
         }
 
         if (phase == RoundPhase.Riding)
         {
-            mapCamera.rect = new Rect(0f, 0f, 1f, 1f);
-            runTime += Time.deltaTime;
-            if (rider != null)
+            mapCamera.rect = new Rect(0f, 0f, 0.5f, 1f);
+            if (player2Camera != null)
             {
-                Vector3 position = rider.transform.position;
-                if (!riderInWater && position.y - 0.5f <= backdrop.SurfaceHeight)
-                {
-                    backdrop.Splash(position);
-                    BurstAt(new Vector3(position.x, backdrop.SurfaceHeight, position.z), new Color(0.25f, 0.85f, 1f), 28);
-                    riderInWater = true;
-                }
-                if (position.y < backdrop.SurfaceHeight - 2.1f || HitsHazard(position))
-                {
-                    RespawnAtFlag(position);
-                    return;
-                }
-                CheckCourseFlag(previousRiderPosition, position);
-                previousRiderPosition = position;
+                player2Camera.rect = new Rect(0.5f, 0f, 0.5f, 1f);
+                player2Camera.enabled = true;
             }
+            runTime += Time.deltaTime;
+            UpdateRider(0);
+            UpdateRider(1);
             return;
         }
 
         float menuFraction = MenuWidth / Screen.width;
         mapCamera.rect = new Rect(menuFraction, 0f, 1f - menuFraction, 1f);
+        if (player2Camera != null) player2Camera.enabled = false;
         MoveCamera();
         if (phase != RoundPhase.Placing)
             return;
@@ -260,7 +269,10 @@ public partial class BarnBuildRounds : MonoBehaviour
     {
         if (phase == RoundPhase.Choosing) PreparePiecePhotos();
         if (phase == RoundPhase.Riding && mapCamera != null)
-            FollowRider(false);
+        {
+            FollowRider(0, false);
+            FollowRider(1, false);
+        }
     }
 
     private void UpdatePlacement(Ray ray)
@@ -476,37 +488,121 @@ public partial class BarnBuildRounds : MonoBehaviour
         }
 
         spawnPoint = CellPosition(spawnCell, tileHeights[spawnCell] + (foundClearCell ? 0.58f : 3f));
-        SpawnRider(spawnPoint);
-        FollowRider(true);
+        EnsurePlayer2Camera();
+        SpawnRider(0, spawnPoint + Vector3.left * 0.72f);
+        SpawnRider(1, spawnPoint + Vector3.right * 0.72f);
+        FollowRider(0, true);
+        FollowRider(1, true);
     }
 
-    private void SpawnRider(Vector3 position)
+    private static InputAction CreateMoveAction(int playerIndex)
     {
-        RemoveRider();
-        riderInWater = false;
-        rider = Instantiate(pogoPlayerPrefab, position, Quaternion.identity, transform);
-        characterSelection?.ApplyToRider(rider);
-        previousRiderPosition = position;
+        InputAction action = new InputAction("Move P" + (playerIndex + 1), InputActionType.Value, expectedControlType: "Vector2");
+        bool playerOne = playerIndex == 0;
+        action.AddCompositeBinding("2DVector")
+            .With("Up", playerOne ? "<Keyboard>/w" : "<Keyboard>/upArrow")
+            .With("Down", playerOne ? "<Keyboard>/s" : "<Keyboard>/downArrow")
+            .With("Left", playerOne ? "<Keyboard>/a" : "<Keyboard>/leftArrow")
+            .With("Right", playerOne ? "<Keyboard>/d" : "<Keyboard>/rightArrow");
+        return action;
     }
 
-    private void RemoveRider()
+    private void SpawnRider(int playerIndex, Vector3 position)
     {
-        if (rider == null)
+        GameObject oldRider = playerIndex == 0 ? rider : riderPlayer2;
+        if (oldRider != null)
+        {
+            oldRider.SetActive(false);
+            Destroy(oldRider);
+        }
+
+        GameObject newRider = Instantiate(pogoPlayerPrefab, position, Quaternion.identity, transform);
+        newRider.name = "Player " + (playerIndex + 1);
+        (playerIndex == 0 ? characterSelection : characterSelectionPlayer2)?.ApplyToRider(newRider, playerIndex);
+        PlayerController controller = newRider.GetComponent<PlayerController>();
+        if (controller != null)
+            controller.SetLocalInputActions(playerMoveActions[playerIndex], playerJumpActions[playerIndex]);
+
+        if (playerIndex == 0)
+        {
+            rider = newRider;
+            riderInWater = false;
+            previousRiderPosition = position;
+        }
+        else
+        {
+            riderPlayer2 = newRider;
+            player2InWater = false;
+            previousPlayer2Position = position;
+        }
+    }
+
+    private void RemoveRider(int playerIndex)
+    {
+        GameObject target = playerIndex == 0 ? rider : riderPlayer2;
+        if (target == null)
             return;
-        rider.SetActive(false);
-        Destroy(rider);
-        rider = null;
+        target.SetActive(false);
+        Destroy(target);
+        if (playerIndex == 0) rider = null;
+        else riderPlayer2 = null;
     }
 
-    private void FollowRider(bool immediate)
+    private void RemoveRiders()
     {
-        if (rider == null)
+        RemoveRider(0);
+        RemoveRider(1);
+    }
+
+    private void EnsurePlayer2Camera()
+    {
+        if (player2Camera != null || mapCamera == null)
+            return;
+        GameObject cameraObject = new GameObject("Player 2 Camera");
+        cameraObject.transform.SetParent(transform);
+        player2Camera = cameraObject.AddComponent<Camera>();
+        player2Camera.CopyFrom(mapCamera);
+        player2Camera.enabled = true;
+        player2Camera.targetTexture = null;
+        player2Camera.rect = new Rect(0.5f, 0f, 0.5f, 1f);
+        player2Camera.GetUniversalAdditionalCameraData().renderType = CameraRenderType.Base;
+    }
+
+    private void UpdateRider(int playerIndex)
+    {
+        GameObject target = playerIndex == 0 ? rider : riderPlayer2;
+        if (target == null) return;
+        Vector3 position = target.transform.position;
+        bool inWater = playerIndex == 0 ? riderInWater : player2InWater;
+        if (!inWater && position.y - 0.5f <= backdrop.SurfaceHeight)
+        {
+            backdrop.Splash(position);
+            BurstAt(new Vector3(position.x, backdrop.SurfaceHeight, position.z), new Color(0.25f, 0.85f, 1f), 28);
+            if (playerIndex == 0) riderInWater = true;
+            else player2InWater = true;
+        }
+        if (position.y < backdrop.SurfaceHeight - 2.1f || HitsHazard(position))
+        {
+            RespawnAtFlag(playerIndex, position);
+            return;
+        }
+        Vector3 previous = playerIndex == 0 ? previousRiderPosition : previousPlayer2Position;
+        CheckCourseFlag(playerIndex, previous, position);
+        if (playerIndex == 0) previousRiderPosition = position;
+        else previousPlayer2Position = position;
+    }
+
+    private void FollowRider(int playerIndex, bool immediate)
+    {
+        GameObject riderToFollow = playerIndex == 0 ? rider : riderPlayer2;
+        Camera followCamera = playerIndex == 0 ? mapCamera : player2Camera;
+        if (riderToFollow == null || followCamera == null)
             return;
 
-        Vector3 target = rider.transform.position + Vector3.up * 1.15f;
+        Vector3 target = riderToFollow.transform.position + Vector3.up * 1.15f;
         float blend = immediate ? 1f : 1f - Mathf.Exp(-10f * Time.unscaledDeltaTime);
         Vector3 offset = new Vector3(0f, 2.05f, -6.3f);
-        Vector3 desired = Vector3.Lerp(mapCamera.transform.position, target + offset, blend);
+        Vector3 desired = Vector3.Lerp(followCamera.transform.position, target + offset, blend);
         desired.x = target.x;
         Vector3 cameraRay = desired - target;
         if (Physics.SphereCast(target, 0.22f, cameraRay.normalized, out RaycastHit hit, cameraRay.magnitude,
@@ -514,12 +610,12 @@ public partial class BarnBuildRounds : MonoBehaviour
             desired = target + cameraRay.normalized * Mathf.Max(0.45f, hit.distance - 0.2f);
 
         desired.y = Mathf.Max(desired.y, target.y + 0.35f);
-        mapCamera.transform.SetPositionAndRotation(desired, Quaternion.LookRotation(new Vector3(0f, -0.24f, 1f), Vector3.up));
+        followCamera.transform.SetPositionAndRotation(desired, Quaternion.LookRotation(new Vector3(0f, -0.24f, 1f), Vector3.up));
     }
 
     private void EndRide()
     {
-        RemoveRider();
+        RemoveRiders();
         phase = RoundPhase.Choosing;
         placedThisRound = false;
         sectionAddedThisRound = false;
@@ -824,6 +920,10 @@ public partial class BarnBuildRounds : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (playerMoveActions != null)
+            foreach (InputAction action in playerMoveActions) action?.Dispose();
+        if (playerJumpActions != null)
+            foreach (InputAction action in playerJumpActions) action?.Dispose();
         Destroy(modelMaterial);
         Destroy(menuSkin);
         DisposePiecePhotos();

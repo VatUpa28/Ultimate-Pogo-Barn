@@ -13,21 +13,25 @@ public class CharacterSelectionUI : MonoBehaviour
     private bool isOpen;
     private bool photoPending;
     private RenderTexture photo;
+    private string playerLabel = "Player 1";
+    private string preferenceKey = PreferenceKey;
 
     private int ChoiceCount => (database != null ? database.CharacterCount : 0) + 1;
     private CharacterData BrowsedCharacter => browseIndex == 0 ? null : database.GetCharacter(browseIndex - 1);
 
-    public void Initialize(CharacterDatabase roster, GameObject player, Func<Transform, RenderTexture> photographer)
+    public void Initialize(CharacterDatabase roster, GameObject player, Func<Transform, RenderTexture> photographer, int playerIndex = 0)
     {
         database = roster;
         riderPrefab = player;
         takePhoto = photographer;
+        playerLabel = "Player " + (playerIndex + 1);
+        preferenceKey = playerIndex == 0 ? PreferenceKey : PreferenceKey + ".P" + (playerIndex + 1);
     }
 
     public void Open()
     {
         browseIndex = 0;
-        string saved = PlayerPrefs.GetString(PreferenceKey);
+        string saved = PlayerPrefs.GetString(preferenceKey);
         for (int index = 1; index < ChoiceCount; index++)
         {
             CharacterData character = database.GetCharacter(index - 1);
@@ -72,7 +76,7 @@ public class CharacterSelectionUI : MonoBehaviour
         GUI.Box(panel, GUIContent.none);
         var title = new GUIStyle(heading) { fontSize = 26, alignment = TextAnchor.MiddleCenter };
         var centered = new GUIStyle(heading) { alignment = TextAnchor.MiddleCenter };
-        GUI.Label(new Rect(panel.x, panel.y + 12, width, 38), "Character Selection", title);
+        GUI.Label(new Rect(panel.x, panel.y + 12, width, 38), playerLabel + " Character Selection", title);
 
         var photoRect = new Rect(panel.x + 18, panel.y + 54, width - 36, photoHeight);
         Color originalColor = GUI.color;
@@ -113,9 +117,9 @@ public class CharacterSelectionUI : MonoBehaviour
     {
         CharacterData character = BrowsedCharacter;
         if (character != null && character.characterPrefab != null)
-            PlayerPrefs.SetString(PreferenceKey, character.name);
+            PlayerPrefs.SetString(preferenceKey, character.name);
         else
-            PlayerPrefs.DeleteKey(PreferenceKey);
+            PlayerPrefs.DeleteKey(preferenceKey);
         PlayerPrefs.Save();
         Close();
     }
@@ -126,9 +130,10 @@ public class CharacterSelectionUI : MonoBehaviour
         ReleasePhoto();
     }
 
-    public void ApplyToRider(GameObject rider)
+    public void ApplyToRider(GameObject rider, int playerIndex = 0)
     {
-        string saved = PlayerPrefs.GetString(PreferenceKey);
+        string key = playerIndex == 0 ? PreferenceKey : PreferenceKey + ".P" + (playerIndex + 1);
+        string saved = PlayerPrefs.GetString(key);
         if (database == null || string.IsNullOrEmpty(saved)) return;
         CharacterData character = database.characters.Find(entry => entry != null && entry.name == saved);
         Transform holder = rider.transform.Find(ModelPath);

@@ -5,7 +5,7 @@ using UnityEngine.InputSystem;
 public partial class BarnBuildRounds
 {
     private readonly List<Vector3> courseFlags = new List<Vector3>();
-    private readonly HashSet<int> reachedFlags = new HashSet<int>();
+    private readonly HashSet<int>[] reachedFlags = { new HashSet<int>(), new HashSet<int>() };
     private readonly List<Transform> sawBlades = new List<Transform>();
     private Transform flagGroup;
     private readonly List<Transform> checkpointMarkers = new List<Transform>();
@@ -14,7 +14,8 @@ public partial class BarnBuildRounds
     private Texture2D menuButton;
     private Texture2D menuHover;
     private Texture2D courseCursor;
-    private int score;
+    private readonly int[] scores = new int[2];
+    private int winningPlayer = -1;
     private float runTime;
     private float noticeUntil;
     private string notice;
@@ -77,11 +78,12 @@ public partial class BarnBuildRounds
                                                 position.y - bounds.min.y, position.z - bounds.center.z);
     }
 
-    private void CheckCourseFlag(Vector3 from, Vector3 to)
+    private void CheckCourseFlag(int playerIndex, Vector3 from, Vector3 to)
     {
+        HashSet<int> playerFlags = reachedFlags[playerIndex];
         for (int i = 0; i < courseFlags.Count; i++)
         {
-            if (reachedFlags.Contains(i)) continue;
+            if (playerFlags.Contains(i)) continue;
             Vector3 flag = courseFlags[i];
             float front = flag.z - 0.65f;
             if (to.z < front || from.z >= front) continue;
@@ -90,30 +92,35 @@ public partial class BarnBuildRounds
             if (Mathf.Abs(crossing.x - flag.x) > CellSize * (SideColumn + 0.5f) ||
                 crossing.y < flag.y - 0.2f || crossing.y > flag.y + 3.6f) continue;
 
-            reachedFlags.Add(i);
-            score += 100;
-            notice = "Checkpoint " + (i + 1) + "   +100";
+            playerFlags.Add(i);
+            scores[playerIndex] += 100;
+            notice = "Player " + (playerIndex + 1) + " checkpoint " + (i + 1) + "   +100";
             checkpointNotice = true;
             noticeUntil = Time.unscaledTime + 2.5f;
             ShowCheckpointFlag(checkpointMarkers[i], true);
             BurstAt(crossing, new Color(0.28f, 1f, 0.52f), 36, true);
             BurstAt(flag + new Vector3(CellSize * 1.7f, 1.65f, 0f), new Color(1f, 0.81f, 0.2f), 28);
             if (i != courseFlags.Count - 1) continue;
-            if (score >= 1000)
+            if (scores[playerIndex] >= 1000)
             {
-                RemoveRider();
+                winningPlayer = playerIndex;
+                RemoveRiders();
                 phase = RoundPhase.Won;
             }
-            else EndRide();
+            else
+            {
+                RemoveRider(playerIndex);
+                if (rider == null && riderPlayer2 == null) EndRide();
+            }
             return;
         }
     }
 
-    private void RespawnAtFlag(Vector3 death)
+    private void RespawnAtFlag(int playerIndex, Vector3 death)
     {
         float nearest = float.PositiveInfinity;
         Vector3 destination = spawnPoint;
-        foreach (int index in reachedFlags)
+        foreach (int index in reachedFlags[playerIndex])
         {
             Vector3 flag = courseFlags[index];
             Vector3 point = flag + new Vector3(0f, 0.58f, -0.9f);
@@ -122,15 +129,15 @@ public partial class BarnBuildRounds
             nearest = distance;
             destination = point;
         }
-        SpawnRider(destination);
-        notice = "Back on the course";
+        SpawnRider(playerIndex, destination + (playerIndex == 0 ? Vector3.left : Vector3.right) * 0.72f);
+        notice = "Player " + (playerIndex + 1) + " back on the course";
         checkpointNotice = false;
         noticeUntil = Time.unscaledTime + 1.5f;
     }
 
     private void ResetCourse(bool showMenu)
     {
-        RemoveRider();
+        RemoveRiders();
         preview.SetActive(false);
         foreach (Transform item in pieces)
         {
@@ -144,13 +151,16 @@ public partial class BarnBuildRounds
         }
         courseFlags.Clear();
         checkpointMarkers.Clear();
-        reachedFlags.Clear();
+        reachedFlags[0].Clear();
+        reachedFlags[1].Clear();
         sawBlades.Clear();
         tileHeights.Clear();
         trackColliders.Clear();
         obstacles.Clear();
         hazardCells.Clear();
-        score = 0;
+        scores[0] = 0;
+        scores[1] = 0;
+        winningPlayer = -1;
         runTime = 0f;
         round = 1;
         noticeUntil = 0f;
@@ -230,7 +240,7 @@ public partial class BarnBuildRounds
         var button = CourseButton();
         if (phase == RoundPhase.SelectingCharacter)
         {
-            if (characterSelection.Draw(button, menuHeading)) phase = RoundPhase.Menu;
+            if (activeCharacterSelection.Draw(button, menuHeading)) phase = RoundPhase.Menu;
             return;
         }
 
@@ -242,20 +252,27 @@ public partial class BarnBuildRounds
             GUI.Box(panel, GUIContent.none);
             GUILayout.BeginArea(new Rect(panel.x + 22, panel.y + 18, panel.width - 44, panel.height - 36));
             var heading = new GUIStyle(menuHeading) {fontSize = 30, alignment = TextAnchor.MiddleCenter};
-            GUILayout.Label(phase == RoundPhase.Menu ? "Ultimate Pogo Barn" : "Course Complete!", heading);
+            GUILayout.Label(phase == RoundPhase.Menu ? "Ultimate Pogo Barn" : "Player " + (winningPlayer + 1) + " wins!", heading);
             GUILayout.Space(10);
             if (phase == RoundPhase.Menu)
             {
                 if (GUILayout.Button("Play", button, GUILayout.Height(47))) ResetCourse(false);
-                if (GUILayout.Button("Character Selection", button, GUILayout.Height(43)))
+                if (GUILayout.Button("Customize Player 1", button, GUILayout.Height(40)))
                 {
+                    activeCharacterSelection = characterSelection;
                     characterSelection.Open();
+                    phase = RoundPhase.SelectingCharacter;
+                }
+                if (GUILayout.Button("Customize Player 2", button, GUILayout.Height(40)))
+                {
+                    activeCharacterSelection = characterSelectionPlayer2;
+                    characterSelectionPlayer2.Open();
                     phase = RoundPhase.SelectingCharacter;
                 }
             }
             else
             {
-                GUILayout.Label(score + " points   •   " + timer);
+                GUILayout.Label("P1 " + scores[0] + "   •   P2 " + scores[1] + " points   •   " + timer);
                 if (GUILayout.Button("Restart", button, GUILayout.Height(43))) ResetCourse(false);
                 if (GUILayout.Button("Main Menu", button, GUILayout.Height(43))) ResetCourse(true);
             }
@@ -264,7 +281,7 @@ public partial class BarnBuildRounds
         }
 
         GUI.Box(new Rect((Screen.width - 310) * .5f, 12, 310, 46),
-                "TIME   " + timer + "     SCORE   " + score + " / 1000", menuHeading);
+                "TIME " + timer + "   P1 " + scores[0] + "   P2 " + scores[1], menuHeading);
         if (Time.unscaledTime < noticeUntil)
         {
             Rect banner = new Rect((Screen.width - 300) * .5f, 62, 300, 38);
@@ -336,9 +353,10 @@ public partial class BarnBuildRounds
             AddCourseFlag();
         }
 
-        foreach (int index in reachedFlags)
-            ShowCheckpointFlag(checkpointMarkers[index], false);
-        reachedFlags.Clear();
+        foreach (int index in reachedFlags[0]) ShowCheckpointFlag(checkpointMarkers[index], false);
+        foreach (int index in reachedFlags[1]) ShowCheckpointFlag(checkpointMarkers[index], false);
+        reachedFlags[0].Clear();
+        reachedFlags[1].Clear();
 
         round++;
         sectionAddedThisRound = false;

@@ -1,5 +1,6 @@
 
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class Map1RaceManager : MonoBehaviour
 {
@@ -8,6 +9,7 @@ public class Map1RaceManager : MonoBehaviour
     [SerializeField] private Transform player1Spawn;
     [SerializeField] private Transform player2Spawn;
     [SerializeField] private bool spawnPlayersOnStart = true;
+    [Min(0)] [SerializeField] private int totalCheckpoints;
 
     [Header("Race Results")]
     public string winner = "";
@@ -15,7 +17,8 @@ public class Map1RaceManager : MonoBehaviour
     public UPBRaceState currentState = UPBRaceState.Waiting;
 
     private readonly PlayerRaceProgress[] players = new PlayerRaceProgress[2];
-    private PlayerInputActions[] inputActions;
+    private InputAction[] moveActions;
+    private InputAction[] jumpActions;
 
     private void Start()
     {
@@ -33,19 +36,9 @@ public class Map1RaceManager : MonoBehaviour
             return;
         }
 
-        int totalCheckpoints = GetTotalCheckpoints();
         SpawnPlayer(0, "Player 1", player1Spawn, totalCheckpoints);
         SpawnPlayer(1, "Player 2", player2Spawn, totalCheckpoints);
         StartRace();
-    }
-
-    private int GetTotalCheckpoints()
-    {
-        UPBCheckpointGate[] gates = FindObjectsByType<UPBCheckpointGate>(FindObjectsSortMode.None);
-        int total = 0;
-        foreach (UPBCheckpointGate gate in gates)
-            total = Mathf.Max(total, gate.checkpointNumber);
-        return total;
     }
 
     private void SpawnPlayer(int index, string playerName, Transform spawn, int totalCheckpoints)
@@ -56,12 +49,16 @@ public class Map1RaceManager : MonoBehaviour
         PlayerController controller = instance.GetComponent<PlayerController>();
         if (controller != null)
         {
-            inputActions ??= new PlayerInputActions[2];
-            inputActions[index] = new PlayerInputActions();
-            var actions = inputActions[index].GameActions;
+            moveActions ??= new InputAction[2];
+            jumpActions ??= new InputAction[2];
+            moveActions[index] = CreateMoveAction(index);
+            jumpActions[index] = new InputAction(
+                "Jump",
+                InputActionType.Button,
+                index == 0 ? "<Keyboard>/space" : "<Keyboard>/enter");
             controller.SetLocalInputActions(
-                index == 0 ? actions.P1Move : actions.P2Move,
-                index == 0 ? actions.P1Jump : actions.P2Jump);
+                moveActions[index],
+                jumpActions[index]);
         }
         else
         {
@@ -73,6 +70,21 @@ public class Map1RaceManager : MonoBehaviour
             progress = instance.AddComponent<PlayerRaceProgress>();
         progress.Initialize(this, playerName, totalCheckpoints);
         players[index] = progress;
+    }
+
+    private static InputAction CreateMoveAction(int playerIndex)
+    {
+        InputAction action = new InputAction("Move", InputActionType.Value, expectedControlType: "Vector2");
+        string up = playerIndex == 0 ? "<Keyboard>/w" : "<Keyboard>/upArrow";
+        string down = playerIndex == 0 ? "<Keyboard>/s" : "<Keyboard>/downArrow";
+        string left = playerIndex == 0 ? "<Keyboard>/a" : "<Keyboard>/leftArrow";
+        string right = playerIndex == 0 ? "<Keyboard>/d" : "<Keyboard>/rightArrow";
+        action.AddCompositeBinding("2DVector")
+            .With("Up", up)
+            .With("Down", down)
+            .With("Left", left)
+            .With("Right", right);
+        return action;
     }
 
     public void StartRace()
@@ -100,10 +112,16 @@ public class Map1RaceManager : MonoBehaviour
 
     private void OnDestroy()
     {
-        if (inputActions == null)
+        DisposeActions(moveActions);
+        DisposeActions(jumpActions);
+    }
+
+    private static void DisposeActions(InputAction[] actions)
+    {
+        if (actions == null)
             return;
-        foreach (PlayerInputActions actions in inputActions)
-            actions?.Dispose();
+        foreach (InputAction action in actions)
+            action?.Dispose();
     }
 
     private void OnGUI()
@@ -121,4 +139,12 @@ public class Map1RaceManager : MonoBehaviour
             GUI.Label(new Rect(15, 70 + i * 22, 400, 22), player.GetProgressLabel());
         }
     }
+}
+
+public enum UPBRaceState
+{
+    Waiting,
+    Countdown,
+    Racing,
+    Finished
 }
