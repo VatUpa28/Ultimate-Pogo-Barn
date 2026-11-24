@@ -49,7 +49,8 @@ public class BarnBackdrop : MonoBehaviour
                 islands.Add((island, island.position.z));
                 DecorateIsland(island, atlasMaterial, islandIndex++);
             }
-            BuildArchipelago(woodedIslands, atlasMaterial);
+            if (woodedIslands.childCount < 8)
+                BuildArchipelago(woodedIslands, atlasMaterial);
             return;
         }
 
@@ -118,7 +119,7 @@ public class BarnBackdrop : MonoBehaviour
 
     private void DecorateIsland(Transform island, Material atlasMaterial, int index)
     {
-        if (island.childCount == 0)
+        if (island.childCount == 0 || island.Find("Island Details") != null)
             return;
 
         Renderer terrain = island.GetChild(0).GetComponentInChildren<Renderer>();

@@ -97,6 +97,7 @@ Material:
     - _DstBlend: 0
     - _DstBlendAlpha: 0
     - _EnvironmentReflections: 1
+    - _Gloss: 0.28
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
@@ -118,7 +119,7 @@ Material:
     - _XRMotionVectorsPass: 1
     - _ZWrite: 1
     m_Colors:
-    - _BaseColor: {r: 0.3196457, g: 0.9063317, b: 0.3429243, a: 1}
+    - _BaseColor: {r: 0.42881447, g: 0.6861694, b: 0.86415094, a: 1}
     - _Color: {r: 0.3196457, g: 0.9063317, b: 0.3429243, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
     - _RimColor: {r: 0.67, g: 0.8399999, b: 1, a: 1}

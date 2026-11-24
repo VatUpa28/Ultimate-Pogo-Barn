@@ -15,13 +15,15 @@ public class PlayerController : MonoBehaviour
     private const float TrackAirTurnRate = 4.8f;
     [SerializeField] private float trackSpinSpeed = 135f;
     [SerializeField] private float trackJumpSpeed = 3.55f;
-    [SerializeField] private float trackMinJumpHeightSpeed = 4.35f;
+    [SerializeField] private float trackMinJumpHeightSpeed = 3.75f;
     [SerializeField] private float trackMaxJumpHeightSpeed = 6f;
 
     [SerializeField] private float trackChargeTime = 0.52f;
     [SerializeField] private float trackWobble = 8f;
 
     private float JumpChargeDuration => useTrackSteering ? trackChargeTime : maxChargeTime;
+    public bool IsCharging => currentState == PlayerState.Charging;
+    public float JumpCharge => JumpChargeDuration > 0f ? Mathf.Clamp01(chargeTime / JumpChargeDuration) : 1f;
 
     [SerializeField] private bool useTrackSteering;
     [SerializeField] private BarnJumpEffects jumpEffects;
