@@ -52,7 +52,7 @@ public partial class BarnBuildRounds : MonoBehaviour
     private GUISkin menuSkin;
     private GUIStyle menuHeading;
 
-    private enum RoundPhase { Menu, Riding, Choosing, Placing, Won, SelectingCharacter }
+    private enum RoundPhase { Menu, Countdown, Riding, RoundSummary, Choosing, Placing, Won, SelectingCharacter }
     private RoundPhase phase;
     private GameObject rider;
     private GameObject riderPlayer2;
@@ -68,6 +68,13 @@ public partial class BarnBuildRounds : MonoBehaviour
     private bool riderInWater;
     private bool player2InWater;
     private Vector3 previousPlayer2Position;
+    private readonly int[] respawnsRemaining = { 1, 1 };
+    private readonly bool[] playerFinishedRound = new bool[2];
+    private int builderPlayerIndex;
+    private float buildTurnSeconds = 18f;
+    private float buildTurnRemaining;
+    private float countdownRemaining;
+    private float summaryRemaining;
     private Quaternion buildCameraRotation;
     private int firstRow = -(SectionRows / 2);
     private readonly List<(Piece piece, PrefabOption custom)> offers = new List<(Piece, PrefabOption)>();
@@ -225,22 +232,53 @@ public partial class BarnBuildRounds : MonoBehaviour
             return;
         }
 
-        if (phase == RoundPhase.Riding)
+        if (phase == RoundPhase.Countdown || phase == RoundPhase.Riding)
         {
-            mapCamera.rect = new Rect(0f, 0f, 0.5f, 1f);
+            bool splitView = rider != null && riderPlayer2 != null;
+            mapCamera.rect = splitView ? new Rect(0f, 0f, 0.5f, 1f) : new Rect(0f, 0f, 1f, 1f);
             if (player2Camera != null)
             {
                 player2Camera.rect = new Rect(0.5f, 0f, 0.5f, 1f);
-                player2Camera.enabled = true;
+                player2Camera.enabled = splitView;
+            }
+            if (phase == RoundPhase.Countdown)
+            {
+                countdownRemaining -= Time.deltaTime;
+                if (countdownRemaining <= 0f)
+                {
+                    phase = RoundPhase.Riding;
+                    foreach (InputAction action in playerMoveActions) action.Enable();
+                    foreach (InputAction action in playerJumpActions) action.Enable();
+                }
+                return;
             }
             runTime += Time.deltaTime;
             UpdateRider(0);
-            UpdateRider(1);
+            if (phase == RoundPhase.Riding)
+                UpdateRider(1);
             return;
         }
 
-        float menuFraction = MenuWidth / Screen.width;
-        mapCamera.rect = new Rect(menuFraction, 0f, 1f - menuFraction, 1f);
+        if (phase == RoundPhase.RoundSummary)
+        {
+            mapCamera.rect = new Rect(0f, 0f, 1f, 1f);
+            if (player2Camera != null) player2Camera.enabled = false;
+            summaryRemaining -= Time.deltaTime;
+            if (summaryRemaining <= 0f) BeginBuilderTurn(0);
+            return;
+        }
+
+        if (phase == RoundPhase.Choosing || phase == RoundPhase.Placing)
+        {
+            buildTurnRemaining -= Time.deltaTime;
+            if (buildTurnRemaining <= 0f)
+            {
+                AdvanceBuilderTurn();
+                return;
+            }
+        }
+
+        mapCamera.rect = new Rect(0f, 0f, 1f, 1f);
         if (player2Camera != null) player2Camera.enabled = false;
         MoveCamera();
         if (phase != RoundPhase.Placing)
@@ -257,7 +295,11 @@ public partial class BarnBuildRounds : MonoBehaviour
             Ray ray = mapCamera.ScreenPointToRay(mouse.position.ReadValue());
             UpdatePlacement(ray);
             if (mouse.leftButton.wasPressedThisFrame && !placedThisRound && validPlacement)
+            {
                 PlacePiece();
+                if (phase != RoundPhase.Placing)
+                    return;
+            }
         }
 
         preview.SetActive(pointerOverMap && !placedThisRound);
@@ -270,8 +312,15 @@ public partial class BarnBuildRounds : MonoBehaviour
         if (phase == RoundPhase.Choosing) PreparePiecePhotos();
         if (phase == RoundPhase.Riding && mapCamera != null)
         {
-            FollowRider(0, false);
-            FollowRider(1, false);
+            if (rider != null && riderPlayer2 != null)
+            {
+                FollowRider(0, false);
+                FollowRider(1, false);
+            }
+            else if (rider != null)
+                FollowRider(0, false, mapCamera);
+            else if (riderPlayer2 != null)
+                FollowRider(1, false, mapCamera);
         }
     }
 
@@ -461,8 +510,14 @@ public partial class BarnBuildRounds : MonoBehaviour
 
     private void BeginRide()
     {
-        phase = RoundPhase.Riding;
+        phase = RoundPhase.Countdown;
         preview.SetActive(false);
+        respawnsRemaining[0] = 1;
+        respawnsRemaining[1] = 1;
+        playerFinishedRound[0] = false;
+        playerFinishedRound[1] = false;
+        firstPlayerAtEnd = -1;
+        countdownRemaining = 3f;
         var spawnCell = new Vector2Int(courseColumn, firstRow);
         bool foundClearCell = false;
         float bestScore = float.PositiveInfinity;
@@ -491,6 +546,8 @@ public partial class BarnBuildRounds : MonoBehaviour
         EnsurePlayer2Camera();
         SpawnRider(0, spawnPoint + Vector3.left * 0.72f);
         SpawnRider(1, spawnPoint + Vector3.right * 0.72f);
+        foreach (InputAction action in playerMoveActions) action.Disable();
+        foreach (InputAction action in playerJumpActions) action.Disable();
         FollowRider(0, true);
         FollowRider(1, true);
     }
@@ -583,7 +640,20 @@ public partial class BarnBuildRounds : MonoBehaviour
         }
         if (position.y < backdrop.SurfaceHeight - 2.1f || HitsHazard(position))
         {
-            RespawnAtFlag(playerIndex, position);
+            if (respawnsRemaining[playerIndex] > 0)
+            {
+                respawnsRemaining[playerIndex]--;
+                RespawnAtFlag(playerIndex, position);
+            }
+            else
+            {
+                playerFinishedRound[playerIndex] = true;
+                RemoveRider(playerIndex);
+                notice = "Player " + (playerIndex + 1) + " is out of respawns";
+                checkpointNotice = false;
+                noticeUntil = Time.unscaledTime + 2f;
+                ResolveRideIfComplete();
+            }
             return;
         }
         Vector3 previous = playerIndex == 0 ? previousRiderPosition : previousPlayer2Position;
@@ -592,10 +662,10 @@ public partial class BarnBuildRounds : MonoBehaviour
         else previousPlayer2Position = position;
     }
 
-    private void FollowRider(int playerIndex, bool immediate)
+    private void FollowRider(int playerIndex, bool immediate, Camera cameraOverride = null)
     {
         GameObject riderToFollow = playerIndex == 0 ? rider : riderPlayer2;
-        Camera followCamera = playerIndex == 0 ? mapCamera : player2Camera;
+        Camera followCamera = cameraOverride != null ? cameraOverride : playerIndex == 0 ? mapCamera : player2Camera;
         if (riderToFollow == null || followCamera == null)
             return;
 
@@ -616,15 +686,11 @@ public partial class BarnBuildRounds : MonoBehaviour
     private void EndRide()
     {
         RemoveRiders();
-        phase = RoundPhase.Choosing;
-        placedThisRound = false;
-        sectionAddedThisRound = false;
-        obstaclePlacements = 0;
         FocusFront();
         buildYaw = buildCameraRotation.eulerAngles.y;
         buildPitch = 32f;
         buildZoom = 1f;
-        OfferBuildPieces();
+        BeginBuilderTurn(0);
     }
 
     private void DrawChoice(Piece piece)
@@ -694,7 +760,8 @@ public partial class BarnBuildRounds : MonoBehaviour
         if (placedThisRound || (!IsSection && obstacles.Contains(selectedCell)))
             return;
 
-        if (IsSection)
+        bool placedSection = IsSection;
+        if (placedSection)
         {
             if (selectedPrefab == null) AppendSection(selectedPiece);
             else AppendCustomPlatform(selectedPrefab.prefab);
@@ -723,8 +790,17 @@ public partial class BarnBuildRounds : MonoBehaviour
             if (selectedPiece == Piece.Spikes || selectedPiece == Piece.Saw) hazardCells.Add(selectedCell);
         }
 
-        if (!IsSection) obstaclePlacements++;
-        placedThisRound = IsSection || flagGroup == null || obstaclePlacements >= ObstaclePlacementLimit;
+        if (placedSection)
+        {
+            placedThisRound = true;
+            AdvanceBuilderTurn();
+            return;
+        }
+
+        obstaclePlacements++;
+        placedThisRound = obstaclePlacements >= ObstaclePlacementLimit;
+        if (placedThisRound)
+            AdvanceBuilderTurn();
     }
 
     private void FocusFront()

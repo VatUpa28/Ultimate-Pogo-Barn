@@ -6,6 +6,7 @@ public partial class BarnBuildRounds
 {
     private readonly List<Vector3> courseFlags = new List<Vector3>();
     private readonly HashSet<int>[] reachedFlags = { new HashSet<int>(), new HashSet<int>() };
+    private readonly List<int> checkpointFirstPlayers = new List<int>();
     private readonly List<Transform> sawBlades = new List<Transform>();
     private Transform flagGroup;
     private readonly List<Transform> checkpointMarkers = new List<Transform>();
@@ -16,6 +17,7 @@ public partial class BarnBuildRounds
     private Texture2D courseCursor;
     private readonly int[] scores = new int[2];
     private int winningPlayer = -1;
+    private int firstPlayerAtEnd = -1;
     private float runTime;
     private float noticeUntil;
     private string notice;
@@ -24,7 +26,9 @@ public partial class BarnBuildRounds
     private float buildPitch;
     private float buildZoom = 1f;
     private bool sectionAddedThisRound;
+    private bool initialBuildPending;
     private const int ObstaclePlacementLimit = 3;
+    private const int WinningScore = 1000;
     private int obstaclePlacements;
 
     private static readonly Piece[] Blueprints =
@@ -50,6 +54,7 @@ public partial class BarnBuildRounds
         var position = CellPosition(new Vector2Int(courseColumn, nextRow - 1), nextHeight);
         int index = courseFlags.Count;
         courseFlags.Add(position);
+        checkpointFirstPlayers.Add(-1);
         var marker = new GameObject("Checkpoint " + (index + 1));
         marker.transform.SetParent(flagGroup, false);
         marker.transform.position = position;
@@ -93,27 +98,65 @@ public partial class BarnBuildRounds
                 crossing.y < flag.y - 0.2f || crossing.y > flag.y + 3.6f) continue;
 
             playerFlags.Add(i);
-            scores[playerIndex] += 100;
-            notice = "Player " + (playerIndex + 1) + " checkpoint " + (i + 1) + "   +100";
+            if (checkpointFirstPlayers[i] < 0)
+            {
+                checkpointFirstPlayers[i] = playerIndex;
+                scores[playerIndex] += 150;
+                notice = "Player " + (playerIndex + 1) + " reached checkpoint first: +150";
+            }
+            else
+            {
+                scores[playerIndex] += 100;
+                notice = "Player " + (playerIndex + 1) + " checkpoint: +100";
+            }
             checkpointNotice = true;
             noticeUntil = Time.unscaledTime + 2.5f;
             ShowCheckpointFlag(checkpointMarkers[i], true);
             BurstAt(crossing, new Color(0.28f, 1f, 0.52f), 36, true);
             BurstAt(flag + new Vector3(CellSize * 1.7f, 1.65f, 0f), new Color(1f, 0.81f, 0.2f), 28);
-            if (i != courseFlags.Count - 1) continue;
-            if (scores[playerIndex] >= 1000)
+            bool finished = i == courseFlags.Count - 1;
+            if (finished)
+            {
+                int finishBonus = firstPlayerAtEnd < 0 ? 120 : 60;
+                if (firstPlayerAtEnd < 0) firstPlayerAtEnd = playerIndex;
+                scores[playerIndex] += finishBonus;
+                playerFinishedRound[playerIndex] = true;
+                notice = "Player " + (playerIndex + 1) + " finished this round: +" + finishBonus;
+                noticeUntil = Time.unscaledTime + 2f;
+                RemoveRider(playerIndex);
+            }
+
+            if (scores[playerIndex] >= WinningScore)
             {
                 winningPlayer = playerIndex;
                 RemoveRiders();
                 phase = RoundPhase.Won;
+                notice = "Player " + (playerIndex + 1) + " reached " + WinningScore + " points and wins!";
+                noticeUntil = Time.unscaledTime + 3f;
+                return;
             }
-            else
+
+            if (finished)
             {
-                RemoveRider(playerIndex);
-                if (rider == null && riderPlayer2 == null) EndRide();
+                ResolveRideIfComplete();
+                return;
             }
+        }
+    }
+
+    private void ResolveRideIfComplete()
+    {
+        if (!playerFinishedRound[0] || !playerFinishedRound[1])
+            return;
+
+        if (winningPlayer >= 0)
+        {
+            phase = RoundPhase.Won;
             return;
         }
+
+        phase = RoundPhase.RoundSummary;
+        summaryRemaining = 2.5f;
     }
 
     private void RespawnAtFlag(int playerIndex, Vector3 death)
@@ -151,6 +194,7 @@ public partial class BarnBuildRounds
         }
         courseFlags.Clear();
         checkpointMarkers.Clear();
+        checkpointFirstPlayers.Clear();
         reachedFlags[0].Clear();
         reachedFlags[1].Clear();
         sawBlades.Clear();
@@ -161,8 +205,10 @@ public partial class BarnBuildRounds
         scores[0] = 0;
         scores[1] = 0;
         winningPlayer = -1;
+        firstPlayerAtEnd = -1;
         runTime = 0f;
         round = 1;
+        initialBuildPending = true;
         noticeUntil = 0f;
         placedThisRound = false;
         sectionAddedThisRound = false;
@@ -174,7 +220,7 @@ public partial class BarnBuildRounds
         else AppendSection(Piece.Grass);
         AddCourseFlag();
         if (showMenu) phase = RoundPhase.Menu;
-        else BeginRide();
+        else BeginBuilderTurn(0);
     }
 
     private void BurstAt(Vector3 point, Color tint, int count, bool checkpointRing = false)
@@ -244,12 +290,48 @@ public partial class BarnBuildRounds
             return;
         }
 
+        if (phase == RoundPhase.Countdown)
+        {
+            DrawPlayerStatus();
+            Rect countdownPanel = new Rect(Screen.width * .35f, Screen.height * .38f, Screen.width * .30f, 120f);
+            GUI.Box(countdownPanel, GUIContent.none);
+            var countdownStyle = new GUIStyle(menuHeading) { fontSize = 64, alignment = TextAnchor.MiddleCenter };
+            GUI.Label(countdownPanel, Mathf.CeilToInt(countdownRemaining).ToString(), countdownStyle);
+            return;
+        }
+
+        if (phase == RoundPhase.RoundSummary)
+        {
+            DrawRoundSummary();
+            return;
+        }
+
+        if (phase == RoundPhase.Choosing)
+        {
+            DrawBlueprints(button);
+            return;
+        }
+
+        if (phase == RoundPhase.Placing)
+        {
+            DrawPlayerStatus();
+            Rect banner = new Rect(Screen.width * .25f, Screen.height - 78f, Screen.width * .5f, 58f);
+            GUI.Box(banner, "Player " + (builderPlayerIndex + 1) + " places one piece  •  " + Mathf.CeilToInt(buildTurnRemaining) + "s remaining");
+            return;
+        }
+
         string timer = string.Format("{0:00}:{1:00}", (int)runTime / 60, (int)runTime % 60);
         if (phase == RoundPhase.Menu || phase == RoundPhase.Won)
         {
-            float width = Mathf.Min(420, Screen.width - 24);
-            var panel = new Rect((Screen.width - width) / 2f, Screen.height * 0.24f, width, 245);
+            float width = Mathf.Min(480, Screen.width - 24);
+            float height = phase == RoundPhase.Won ? 350f : 245f;
+            var panel = new Rect((Screen.width - width) / 2f, (Screen.height - height) * 0.5f, width, height);
             GUI.Box(panel, GUIContent.none);
+            if (phase == RoundPhase.Won)
+            {
+                DrawScoreBar(panel, 0, "Player 1", scores[0], new Color(.30f, .73f, 1f));
+                DrawScoreBar(panel, 1, "Player 2", scores[1], new Color(1f, .63f, .28f));
+            }
             GUILayout.BeginArea(new Rect(panel.x + 22, panel.y + 18, panel.width - 44, panel.height - 36));
             var heading = new GUIStyle(menuHeading) {fontSize = 30, alignment = TextAnchor.MiddleCenter};
             GUILayout.Label(phase == RoundPhase.Menu ? "Ultimate Pogo Barn" : "Player " + (winningPlayer + 1) + " wins!", heading);
@@ -272,6 +354,7 @@ public partial class BarnBuildRounds
             }
             else
             {
+                GUILayout.Space(124);
                 GUILayout.Label("P1 " + scores[0] + "   •   P2 " + scores[1] + " points   •   " + timer);
                 if (GUILayout.Button("Restart", button, GUILayout.Height(43))) ResetCourse(false);
                 if (GUILayout.Button("Main Menu", button, GUILayout.Height(43))) ResetCourse(true);
@@ -282,6 +365,8 @@ public partial class BarnBuildRounds
 
         GUI.Box(new Rect((Screen.width - 310) * .5f, 12, 310, 46),
                 "TIME " + timer + "   P1 " + scores[0] + "   P2 " + scores[1], menuHeading);
+        if (phase == RoundPhase.Riding)
+            DrawPlayerStatus();
         if (Time.unscaledTime < noticeUntil)
         {
             Rect banner = new Rect((Screen.width - 300) * .5f, 62, 300, 38);
@@ -293,17 +378,14 @@ public partial class BarnBuildRounds
             GUI.Label(banner, notice, centered);
         }
 
-        if (phase == RoundPhase.Choosing)
-        {
-            DrawBlueprints(button);
+        if (phase == RoundPhase.Riding)
             return;
-        }
 
         GUILayout.BeginArea(new Rect(14, 12, MenuWidth - 28, 305), GUI.skin.box);
         GUILayout.Label("Round " + round, menuHeading);
         if (phase == RoundPhase.Riding)
         {
-            GUILayout.Label("Reach the flag to build. Tap Space for a low jump, or hold and release for height.");
+            GUILayout.Label("Reach flags for points. P1: WASD + Space   •   P2: Arrows + Enter");
             var controller = rider != null ? rider.GetComponent<PlayerController>() : null;
             if (controller != null && controller.IsCharging)
             {
@@ -336,31 +418,104 @@ public partial class BarnBuildRounds
                 GUILayout.Label(sectionAddedThisRound ? "Platform ready" : "All three obstacles placed");
             }
 
-            if ((sectionAddedThisRound || obstaclePlacements > 0) &&
-                GUILayout.Button("Start Round", button, GUILayout.Height(38)))
-                BeginNextRound();
+            GUILayout.Label("Player " + (builderPlayerIndex + 1) + " is placing. The next player starts automatically.");
         }
 
         GUILayout.EndArea();
     }
 
-    private void BeginNextRound()
+    private void DrawPlayerStatus()
     {
+        DrawPlayerStatusPanel(0, new Rect(14f, Screen.height - 92f, 250f, 76f));
+        DrawPlayerStatusPanel(1, new Rect(Screen.width - 264f, Screen.height - 92f, 250f, 76f));
+    }
+
+    private void DrawPlayerStatusPanel(int playerIndex, Rect panel)
+    {
+        GUI.Box(panel, GUIContent.none);
+        string name = "P" + (playerIndex + 1);
+        GUI.Label(new Rect(panel.x + 10f, panel.y + 6f, panel.width - 20f, 22f),
+            name + "  •  respawns " + respawnsRemaining[playerIndex] + "  •  " + scores[playerIndex] + " pts");
+        GameObject target = playerIndex == 0 ? rider : riderPlayer2;
+        PlayerController controller = target != null ? target.GetComponent<PlayerController>() : null;
+        Rect bar = new Rect(panel.x + 10f, panel.y + 40f, panel.width - 20f, 20f);
+        GUI.color = new Color(.08f, .12f, .17f, .9f);
+        GUI.DrawTexture(bar, Texture2D.whiteTexture);
+        if (controller != null && controller.IsCharging)
+        {
+            bar.width *= controller.JumpCharge;
+            GUI.color = Color.Lerp(new Color(.36f, .78f, 1f), new Color(.42f, 1f, .52f), controller.JumpCharge);
+            GUI.DrawTexture(bar, Texture2D.whiteTexture);
+        }
+        GUI.color = Color.white;
+        GUI.Label(new Rect(panel.x + 10f, panel.y + 39f, panel.width - 20f, 20f), "Jump charge");
+    }
+
+    private void DrawRoundSummary()
+    {
+        float width = Mathf.Min(560f, Screen.width - 32f);
+        float height = 250f;
+        Rect panel = new Rect((Screen.width - width) * .5f, (Screen.height - height) * .5f, width, height);
+        GUI.Box(panel, GUIContent.none);
+        var heading = new GUIStyle(menuHeading) { fontSize = 26, alignment = TextAnchor.MiddleCenter };
+        GUI.Label(new Rect(panel.x + 18f, panel.y + 14f, width - 36f, 38f), "Round " + round + " scores", heading);
+        DrawScoreBar(panel, 0, "Player 1", scores[0], new Color(.30f, .73f, 1f));
+        DrawScoreBar(panel, 1, "Player 2", scores[1], new Color(1f, .63f, .28f));
+        var note = new GUIStyle(menuHeading) { alignment = TextAnchor.MiddleCenter };
+        GUI.Label(new Rect(panel.x + 20f, panel.yMax - 42f, width - 40f, 28f), "Next obstacle turns begin shortly", note);
+    }
+
+    private void DrawScoreBar(Rect panel, int index, string label, int score, Color color)
+    {
+        float y = panel.y + 82f + index * 64f;
+        GUI.Label(new Rect(panel.x + 26f, y, 90f, 28f), label);
+        Rect bar = new Rect(panel.x + 118f, y + 3f, panel.width - 178f, 22f);
+        GUI.color = new Color(.08f, .12f, .17f, .95f);
+        GUI.DrawTexture(bar, Texture2D.whiteTexture);
+        bar.width *= Mathf.Clamp01(score / 1000f);
+        GUI.color = color;
+        GUI.DrawTexture(bar, Texture2D.whiteTexture);
+        GUI.color = Color.white;
+        GUI.Label(new Rect(panel.xMax - 56f, y, 48f, 28f), score.ToString());
+    }
+
+    private void BeginBuilderTurn(int playerIndex)
+    {
+        builderPlayerIndex = playerIndex;
+        placedThisRound = false;
+        obstaclePlacements = 0;
+        buildTurnRemaining = buildTurnSeconds;
+        if (playerIndex == 0)
+        {
+            sectionAddedThisRound = false;
+            foreach (int index in reachedFlags[0]) ShowCheckpointFlag(checkpointMarkers[index], false);
+            foreach (int index in reachedFlags[1]) ShowCheckpointFlag(checkpointMarkers[index], false);
+            reachedFlags[0].Clear();
+            reachedFlags[1].Clear();
+        }
+
+        OfferBuildPieces();
+    }
+
+    private void AdvanceBuilderTurn()
+    {
+        if (builderPlayerIndex == 0)
+        {
+            BeginBuilderTurn(1);
+            return;
+        }
+
         if (!sectionAddedThisRound)
         {
-            if (obstaclePlacements == 0) return;
             AppendSection(Piece.Grass);
             AddCourseFlag();
         }
-
-        foreach (int index in reachedFlags[0]) ShowCheckpointFlag(checkpointMarkers[index], false);
-        foreach (int index in reachedFlags[1]) ShowCheckpointFlag(checkpointMarkers[index], false);
-        reachedFlags[0].Clear();
-        reachedFlags[1].Clear();
-
-        round++;
-        sectionAddedThisRound = false;
-        obstaclePlacements = 0;
+        for (int i = 0; i < checkpointFirstPlayers.Count; i++)
+            checkpointFirstPlayers[i] = -1;
+        if (initialBuildPending)
+            initialBuildPending = false;
+        else
+            round++;
         BeginRide();
     }
 
@@ -381,9 +536,9 @@ public partial class BarnBuildRounds
         foreach (PrefabOption option in customPrefabs)
             if (option != null && option.prefab && !IsPlatformPrefab(option.prefab)) obstaclePool.Add((Piece.Barrel, option));
         DrawFrom(obstaclePool, 2);
-        placedThisRound = false;
         preview.SetActive(false);
         phase = RoundPhase.Choosing;
+        buildTurnRemaining = buildTurnSeconds;
     }
 
     private void DrawFrom(List<(Piece piece, PrefabOption custom)> pool, int count)
@@ -398,13 +553,18 @@ public partial class BarnBuildRounds
 
     private void DrawBlueprints(GUIStyle button)
     {
+        Color previousBackground = GUI.color;
+        GUI.color = new Color(.07f, .11f, .16f, 1f);
+        GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), Texture2D.whiteTexture);
+        GUI.color = previousBackground;
+
         float width = Mathf.Min(Screen.width - 30f, 980f);
         float cardWidth = (width - 46f) / 4f;
         float cardHeight = Mathf.Min(262f, Screen.height * .48f);
         float left = (Screen.width - width) * .5f;
         float top = (Screen.height - cardHeight) * .48f;
         GUI.Box(new Rect(left, top - 54, width, cardHeight + 68), GUIContent.none);
-        const string title = "Choose one platform or obstacle";
+        string title = "Player " + (builderPlayerIndex + 1) + " — choose one piece   " + Mathf.CeilToInt(buildTurnRemaining) + "s";
         GUI.Label(new Rect(left + 17, top - 41, width - 30, 34), title, menuHeading);
 
         var categoryStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft };
