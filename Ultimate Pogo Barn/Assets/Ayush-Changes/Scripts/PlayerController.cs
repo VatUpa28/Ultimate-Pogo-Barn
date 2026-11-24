@@ -31,6 +31,10 @@ public class PlayerController : MonoBehaviour
     [Header("Input")]
     [SerializeField] private InputActionReference moveAction;
     [SerializeField] private InputActionReference jumpAction;
+    private InputAction localMoveAction;
+    private InputAction localJumpAction;
+    private InputAction boundMoveAction;
+    private InputAction boundJumpAction;
 
     [Header("Visual References")]
     [SerializeField] private Transform playerVisuals;
@@ -112,38 +116,70 @@ public class PlayerController : MonoBehaviour
 
     private void OnEnable()
     {
-        if (moveAction != null)
-        {
-            moveAction.action.actionMap.Enable();
-
-            moveAction.action.performed += OnMove;
-            moveAction.action.canceled += OnMove;
-
-            moveInput = moveAction.action.ReadValue<Vector2>();
-        }
-
-        if (jumpAction != null)
-        {
-            jumpAction.action.actionMap.Enable();
-
-            jumpAction.action.started += OnJumpStarted;
-            jumpAction.action.canceled += OnJumpReleased;
-        }
+        BindInputActions();
     }
 
     private void OnDisable()
     {
-        if (moveAction != null)
+        UnbindInputActions();
+    }
+
+    public void SetLocalInputActions(InputAction move, InputAction jump)
+    {
+        UnbindInputActions();
+        localMoveAction = move;
+        localJumpAction = jump;
+        if (isActiveAndEnabled)
+            BindInputActions();
+    }
+
+    private void BindInputActions()
+    {
+        boundMoveAction = localMoveAction != null ? localMoveAction : moveAction != null ? moveAction.action : null;
+        boundJumpAction = localJumpAction != null ? localJumpAction : jumpAction != null ? jumpAction.action : null;
+
+        if (boundMoveAction != null)
         {
-            moveAction.action.performed -= OnMove;
-            moveAction.action.canceled -= OnMove;
+            if (localMoveAction == null)
+                boundMoveAction.actionMap.Enable();
+            else
+                boundMoveAction.Enable();
+            boundMoveAction.performed += OnMove;
+            boundMoveAction.canceled += OnMove;
+            moveInput = boundMoveAction.ReadValue<Vector2>();
         }
 
-        if (jumpAction != null)
+        if (boundJumpAction != null)
         {
-            jumpAction.action.started -= OnJumpStarted;
-            jumpAction.action.canceled -= OnJumpReleased;
+            if (localJumpAction == null)
+                boundJumpAction.actionMap.Enable();
+            else
+                boundJumpAction.Enable();
+            boundJumpAction.started += OnJumpStarted;
+            boundJumpAction.canceled += OnJumpReleased;
         }
+    }
+
+    private void UnbindInputActions()
+    {
+        if (boundMoveAction != null)
+        {
+            boundMoveAction.performed -= OnMove;
+            boundMoveAction.canceled -= OnMove;
+            if (localMoveAction != null)
+                boundMoveAction.Disable();
+        }
+
+        if (boundJumpAction != null)
+        {
+            boundJumpAction.started -= OnJumpStarted;
+            boundJumpAction.canceled -= OnJumpReleased;
+            if (localJumpAction != null)
+                boundJumpAction.Disable();
+        }
+
+        boundMoveAction = null;
+        boundJumpAction = null;
     }
 
     private void Update()

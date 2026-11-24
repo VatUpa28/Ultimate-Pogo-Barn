@@ -2276,7 +2276,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -7005,6 +7005,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1677296212}
+  - component: {fileID: 1677296213}
   m_Layer: 0
   m_Name: RaceObjects
   m_TagString: Untagged
@@ -7029,6 +7030,25 @@ Transform:
   - {fileID: 1252899530}
   m_Father: {fileID: 1913518935}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1677296213
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1677296211}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cf60440f3cfe13a498143366372e98fa, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::Map1RaceManager
+  playerPrefab: {fileID: 1191739560507541346, guid: f41570f812e8a7143a517df8d5f22a29, type: 3}
+  player1Spawn: {fileID: 1137777285}
+  player2Spawn: {fileID: 1252899530}
+  spawnPlayersOnStart: 1
+  winner: ""
+  winningTime: 0
+  currentState: 0
 --- !u!1 &1756943222
 GameObject:
   m_ObjectHideFlags: 0

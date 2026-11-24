@@ -178,7 +178,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9bb324faef49f1b4b9f47228d8e8f328, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::UPBCheckpointGate
-  CheckpointIndex: 0
+  CheckpointIndex: 1
 --- !u!1 &5779680710796229512
 GameObject:
   m_ObjectHideFlags: 0
